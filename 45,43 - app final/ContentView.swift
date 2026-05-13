@@ -11,17 +11,19 @@ enum PantallaActual {
     case login
     case olvideContrasena
     case reservacion
+    case solicitudes
 }
 
 struct ContentView: View {
     @State private var pantallaActual: PantallaActual = .login
     @State private var mostrarMenu = false
+    @State private var usuarioActual: Usuario? = nil
 
     var body: some View {
         ZStack(alignment: .leading) {
             contenidoPrincipal
 
-            if pantallaActual == .reservacion && mostrarMenu {
+            if (pantallaActual == .reservacion || pantallaActual == .solicitudes) && mostrarMenu {
                 Color.black.opacity(0.20)
                     .ignoresSafeArea()
                     .onTapGesture {
@@ -45,7 +47,8 @@ struct ContentView: View {
                 accionOlvideContrasena: {
                     pantallaActual = .olvideContrasena
                 },
-                accionIngresar: {
+                accionIngresar: { usuario in
+                    usuarioActual = usuario
                     pantallaActual = .reservacion
                 }
             )
@@ -61,37 +64,53 @@ struct ContentView: View {
             )
 
         case .reservacion:
-            ReservacionView(
-                accionAbrirMenu: {
-                    withAnimation {
-                        mostrarMenu = true
+            if let usuario = usuarioActual {
+                ReservacionView(
+                    usuario: usuario,
+                    accionAbrirMenu: {
+                        withAnimation { mostrarMenu = true }
+                    },
+                    accionCerrarSesion: {
+                        cerrarSesion()
                     }
-                },
-                accionCerrarSesion: {
-                    mostrarMenu = false
-                    pantallaActual = .login
-                }
-            )
+                )
+            }
+
+        case .solicitudes:
+            if let usuario = usuarioActual {
+                SolicitudesView(
+                    usuario: usuario,
+                    accionAbrirMenu: {
+                        withAnimation { mostrarMenu = true }
+                    },
+                    accionCerrarSesion: {
+                        cerrarSesion()
+                    }
+                )
+            }
         }
     }
 
     private var menuDesplegable: some View {
         HStack(spacing: 0) {
             MenuLateralView(
+                usuario: usuarioActual,
                 accionInicio: {
-                    withAnimation {
-                        mostrarMenu = false
-                    }
+                    withAnimation { mostrarMenu = false }
+                    pantallaActual = .reservacion
                 },
                 accionUsuarios: {},
                 accionRoles: {},
                 accionReservaciones: {
-                    withAnimation {
-                        mostrarMenu = false
-                    }
+                    withAnimation { mostrarMenu = false }
+                    pantallaActual = .reservacion
                 },
                 accionSolicitudes: {
-                    // Puedes agregar lógica aquí si lo necesitas
+                    withAnimation { mostrarMenu = false }
+                    // Solo el administrador puede ir a Solicitudes
+                    if usuarioActual?.rol == .administrador {
+                        pantallaActual = .solicitudes
+                    }
                 }
             )
             .frame(width: min(320, UIScreen.main.bounds.width * 0.68))
@@ -101,8 +120,7 @@ struct ContentView: View {
                     Spacer()
 
                     Button(action: {
-                        mostrarMenu = false
-                        pantallaActual = .login
+                        cerrarSesion()
                     }) {
                         Image(systemName: "rectangle.portrait.and.arrow.right")
                             .font(.system(size: 28, weight: .medium))
@@ -118,6 +136,13 @@ struct ContentView: View {
             .background(Color(red: 0.93, green: 0.93, blue: 0.94))
         }
         .ignoresSafeArea()
+    }
+
+    private func cerrarSesion() {
+        AuthManager.shared.cerrarSesion()
+        mostrarMenu = false
+        usuarioActual = nil
+        pantallaActual = .login
     }
 }
 

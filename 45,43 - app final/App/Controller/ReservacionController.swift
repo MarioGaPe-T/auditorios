@@ -2,8 +2,6 @@
 //  ReservacionController.swift
 //  45,43 - app final
 //
-//  Created by Alumno on 15/04/26.
-//
 
 import Foundation
 
@@ -14,7 +12,6 @@ class ReservacionController {
     private init() {}
 
     // MARK: - Procesar acción según rol
-    /// Devuelve un mensaje de resultado para mostrar en la UI
     func procesarAccion(
         usuario: Usuario,
         bloques: [BloqueHorario],
@@ -25,51 +22,58 @@ class ReservacionController {
             return "Selecciona al menos un horario."
         }
 
-        let fecha      = fechaActual()
+        let fecha = fechaActual()
         let horaInicio = bloques.first?.horaInicio ?? ""
-        let horaFin    = bloques.last?.horaFin ?? ""
-        let hora       = "\(horaInicio) - \(horaFin)"
+        let horaFin = bloques.last?.horaFin ?? ""
+        let hora = "\(horaInicio) - \(horaFin)"
 
         switch usuario.rol {
 
-        // ─── Administrador: reserva directa confirmada ───────────────────────
         case .administrador:
             let exito = DatabaseManager.shared.insertarReservacion(
-                usuarioId:     usuario.id,
+                usuarioId: usuario.id,
                 nombreUsuario: usuario.nombre,
-                sala:          sala,
-                fecha:         fecha,
-                horaInicio:    horaInicio,
-                horaFin:       horaFin,
-                tipo:          .confirmada
+                sala: sala,
+                fecha: fecha,
+                horaInicio: horaInicio,
+                horaFin: horaFin,
+                tipo: .confirmada
             )
+
             return exito
                 ? "✅ Reservación confirmada para \(sala) — \(hora)"
                 : "❌ Error al guardar la reservación."
 
-        // ─── Directivo: reserva autoconfirmada ───────────────────────────────
         case .directivo:
             let exito = DatabaseManager.shared.insertarReservacion(
-                usuarioId:     usuario.id,
+                usuarioId: usuario.id,
                 nombreUsuario: usuario.nombre,
-                sala:          sala,
-                fecha:         fecha,
-                horaInicio:    horaInicio,
-                horaFin:       horaFin,
-                tipo:          .confirmada
+                sala: sala,
+                fecha: fecha,
+                horaInicio: horaInicio,
+                horaFin: horaFin,
+                tipo: .confirmada
             )
+
             return exito
                 ? "✅ Reservación confirmada automáticamente — \(hora)"
                 : "❌ Error al guardar la reservación."
 
-        // ─── Jefatura: genera solicitud pendiente de aprobación ──────────────
         case .jefatura:
             let exito = DatabaseManager.shared.insertarSolicitud(
+                usuarioId: usuario.id,
                 usuario: usuario.nombre,
-                sala:    sala,
-                fecha:   fecha,
-                hora:    hora
+                correo: usuario.correo,
+                sala: sala,
+                fecha: fecha,
+                horaInicio: horaInicio,
+                horaFin: horaFin,
+                motivo: "Reservación de sala audiovisual",
+                necesitaMicrofono: false,
+                necesitaBocina: false,
+                necesitaProyector: false
             )
+
             return exito
                 ? "📋 Solicitud enviada. Pendiente de aprobación del administrador."
                 : "❌ Error al enviar la solicitud."

@@ -108,7 +108,7 @@ struct SolicitudesView: View {
                 .font(.system(size: 16, weight: .semibold))
                 .foregroundColor(.gray)
 
-            Text("\(solicitud.fecha) • \(solicitud.hora)")
+            Text("\(solicitud.fecha) • \(solicitud.horaInicio) - \(solicitud.horaFin)")
                 .font(.system(size: 14))
                 .foregroundColor(.gray)
 
@@ -164,12 +164,18 @@ struct SolicitudesView: View {
         case .pendiente:
             texto = "Pendiente"
             color = Color.orange
+
         case .aprobada:
             texto = "Aprobada"
             color = Color(red: 0.05, green: 0.75, blue: 0.38)
+
         case .rechazada:
             texto = "Rechazada"
             color = Color(red: 1.00, green: 0.34, blue: 0.34)
+
+        case .porConfirmar:
+            texto = "Por confirmar"
+            color = Color(red: 0.10, green: 0.45, blue: 0.67)
         }
 
         return Text(texto)
