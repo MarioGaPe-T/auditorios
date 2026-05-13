@@ -7,30 +7,12 @@
 
 import SwiftUI
 
-struct Solicitud: Identifiable {
-    let id = UUID()
-    let usuario: String
-    let sala: String
-    let fecha: String
-    let hora: String
-    let estado: EstadoSolicitud
-}
-
-enum EstadoSolicitud {
-    case pendiente
-    case aprobada
-    case rechazada
-}
-
 struct SolicitudesView: View {
+    let usuario: Usuario
     let accionAbrirMenu: () -> Void
     let accionCerrarSesion: () -> Void
 
-    @State private var solicitudes: [Solicitud] = [
-        Solicitud(usuario: "Juan Pérez", sala: "Sala Audiovisual A", fecha: "21 Abril 2026", hora: "08:00 - 09:00", estado: .pendiente),
-        Solicitud(usuario: "María López", sala: "Sala Audiovisual B", fecha: "22 Abril 2026", hora: "10:00 - 11:00", estado: .pendiente),
-        Solicitud(usuario: "Carlos Ruiz", sala: "Sala Audiovisual E", fecha: "20 Abril 2026", hora: "12:00 - 13:00", estado: .aprobada)
-    ] 
+    @State private var solicitudes: [Solicitud] = []
 
     var body: some View {
         ZStack {
@@ -48,8 +30,20 @@ struct SolicitudesView: View {
                             .foregroundColor(Color(red: 0.10, green: 0.45, blue: 0.67))
                             .padding(.top, 10)
 
-                        ForEach(solicitudes.indices, id: \.self) { index in
-                            tarjetaSolicitud(index: index)
+                        if solicitudes.isEmpty {
+                            VStack(spacing: 12) {
+                                Image(systemName: "tray")
+                                    .font(.system(size: 48))
+                                    .foregroundColor(.gray.opacity(0.5))
+                                Text("Sin solicitudes pendientes")
+                                    .font(.system(size: 16))
+                                    .foregroundColor(.gray)
+                            }
+                            .padding(.top, 60)
+                        } else {
+                            ForEach(solicitudes.indices, id: \.self) { index in
+                                tarjetaSolicitud(index: index)
+                            }
                         }
 
                     }
@@ -58,6 +52,14 @@ struct SolicitudesView: View {
                 }
             }
         }
+        .onAppear {
+            cargarSolicitudes()
+        }
+    }
+
+    // MARK: - Cargar solicitudes desde SQLite
+    private func cargarSolicitudes() {
+        solicitudes = DatabaseManager.shared.obtenerSolicitudes()
     }
 
     // MARK: - Barra superior
@@ -116,13 +118,11 @@ struct SolicitudesView: View {
                 HStack(spacing: 12) {
 
                     Button(action: {
-                        solicitudes[index] = Solicitud(
-                            usuario: solicitud.usuario,
-                            sala: solicitud.sala,
-                            fecha: solicitud.fecha,
-                            hora: solicitud.hora,
-                            estado: .aprobada
+                        DatabaseManager.shared.actualizarEstadoSolicitud(
+                            id: solicitud.id,
+                            nuevoEstado: .aprobada
                         )
+                        cargarSolicitudes()
                     }) {
                         Text("Aprobar")
                             .foregroundColor(.white)
@@ -133,13 +133,11 @@ struct SolicitudesView: View {
                     }
 
                     Button(action: {
-                        solicitudes[index] = Solicitud(
-                            usuario: solicitud.usuario,
-                            sala: solicitud.sala,
-                            fecha: solicitud.fecha,
-                            hora: solicitud.hora,
-                            estado: .rechazada
+                        DatabaseManager.shared.actualizarEstadoSolicitud(
+                            id: solicitud.id,
+                            nuevoEstado: .rechazada
                         )
+                        cargarSolicitudes()
                     }) {
                         Text("Rechazar")
                             .foregroundColor(.white)
@@ -186,6 +184,7 @@ struct SolicitudesView: View {
 
 #Preview {
     SolicitudesView(
+        usuario: Usuario(id: 1, nombre: "Admin", correo: "admin@test.com", rol: .administrador),
         accionAbrirMenu: {},
         accionCerrarSesion: {}
     )
