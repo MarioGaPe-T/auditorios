@@ -9,9 +9,9 @@ import Foundation
 
 // MARK: - Estado de solicitud
 enum EstadoSolicitud: String {
-    case pendiente    = "pendiente"
-    case aprobada     = "aprobada"
-    case rechazada    = "rechazada"
+    case pendiente = "pendiente"
+    case aprobada = "aprobada"
+    case rechazada = "rechazada"
     case porConfirmar = "por_confirmar"
 }
 

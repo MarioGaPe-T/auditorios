@@ -28,10 +28,18 @@ struct Reservacion: Identifiable {
 // MARK: - Bloque de horario para el calendario
 
 
+enum EstadoBloqueHorario {
+    case disponible
+    case porConfirmar
+    case ocupado
+    case seleccionado
+}
+
 struct BloqueHorario: Identifiable {
     let id = UUID()
     let etiquetaDia: String?
+    let fecha: String
     let horaInicio: String
     let horaFin: String
-    var disponible: Bool
+    var estado: EstadoBloqueHorario
 }

@@ -181,7 +181,8 @@ class DatabaseManager {
         motivo: String,
         necesitaMicrofono: Bool,
         necesitaBocina: Bool,
-        necesitaProyector: Bool
+        necesitaProyector: Bool,
+        estado: EstadoSolicitud
     ) -> Bool {
         let sql = """
             INSERT INTO solicitudes (
@@ -198,7 +199,7 @@ class DatabaseManager {
                 necesita_proyector,
                 estado
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pendiente');
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
         """
 
         var statement: OpaquePointer?
@@ -219,6 +220,7 @@ class DatabaseManager {
         sqlite3_bind_int(statement, 9, necesitaMicrofono ? 1 : 0)
         sqlite3_bind_int(statement, 10, necesitaBocina ? 1 : 0)
         sqlite3_bind_int(statement, 11, necesitaProyector ? 1 : 0)
+        sqlite3_bind_text(statement, 12, (estado.rawValue as NSString).utf8String, -1, nil)
 
         let resultado = sqlite3_step(statement) == SQLITE_DONE
 
@@ -344,5 +346,76 @@ class DatabaseManager {
         let resultado = sqlite3_step(statement) == SQLITE_DONE
         sqlite3_finalize(statement)
         return resultado
+    }
+    
+    func estadoHorario(
+        sala: String,
+        fecha: String,
+        horaInicio: String,
+        horaFin: String
+    ) -> EstadoBloqueHorario {
+
+        // 1. Primero revisar si ya existe una reservación confirmada
+        let sqlReservacion = """
+            SELECT COUNT(*)
+            FROM reservaciones
+            WHERE sala = ?
+            AND fecha = ?
+            AND hora_inicio < ?
+            AND hora_fin > ?;
+        """
+
+        var statementReservacion: OpaquePointer?
+        var ocupado = false
+
+        if sqlite3_prepare_v2(db, sqlReservacion, -1, &statementReservacion, nil) == SQLITE_OK {
+            sqlite3_bind_text(statementReservacion, 1, (sala as NSString).utf8String, -1, nil)
+            sqlite3_bind_text(statementReservacion, 2, (fecha as NSString).utf8String, -1, nil)
+            sqlite3_bind_text(statementReservacion, 3, (horaFin as NSString).utf8String, -1, nil)
+            sqlite3_bind_text(statementReservacion, 4, (horaInicio as NSString).utf8String, -1, nil)
+
+            if sqlite3_step(statementReservacion) == SQLITE_ROW {
+                ocupado = sqlite3_column_int(statementReservacion, 0) > 0
+            }
+        }
+
+        sqlite3_finalize(statementReservacion)
+
+        if ocupado {
+            return .ocupado
+        }
+
+        // 2. Luego revisar si existe una solicitud apartada o pendiente
+        let sqlSolicitud = """
+            SELECT COUNT(*)
+            FROM solicitudes
+            WHERE sala = ?
+            AND fecha = ?
+            AND estado IN ('pendiente', 'por_confirmar')
+            AND hora_inicio < ?
+            AND hora_fin > ?;
+        """
+
+        var statementSolicitud: OpaquePointer?
+        var porConfirmar = false
+
+        if sqlite3_prepare_v2(db, sqlSolicitud, -1, &statementSolicitud, nil) == SQLITE_OK {
+            sqlite3_bind_text(statementSolicitud, 1, (sala as NSString).utf8String, -1, nil)
+            sqlite3_bind_text(statementSolicitud, 2, (fecha as NSString).utf8String, -1, nil)
+            sqlite3_bind_text(statementSolicitud, 3, (horaFin as NSString).utf8String, -1, nil)
+            sqlite3_bind_text(statementSolicitud, 4, (horaInicio as NSString).utf8String, -1, nil)
+
+            if sqlite3_step(statementSolicitud) == SQLITE_ROW {
+                porConfirmar = sqlite3_column_int(statementSolicitud, 0) > 0
+            }
+        }
+
+        sqlite3_finalize(statementSolicitud)
+
+        if porConfirmar {
+            return .porConfirmar
+        }
+
+        return .disponible
     }
 }

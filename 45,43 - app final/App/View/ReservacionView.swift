@@ -2,62 +2,25 @@
 //  ReservacionView.swift
 //  45,43 - app final
 //
-//  Created by Alumno on 15/04/26.
-//
 
 import SwiftUI
-
 
 struct ReservacionView: View {
     let usuario: Usuario
     let accionAbrirMenu: () -> Void
     let accionCerrarSesion: () -> Void
 
-    // Bloques seleccionados por el usuario
     @State private var seleccionados: Set<UUID> = []
+    @State private var bloques: [BloqueHorario] = []
+
     @State private var mostrarConfirmacion = false
     @State private var mensajeConfirmacion = ""
 
+    @State private var mostrarFormularioSolicitud = false
+    @State private var bloquesParaSolicitud: [BloqueHorario] = []
+
+    private let salaActual = "Sala Audiovisual E"
     private let dias = ["LUNES", "MARTES", "MIÉRCOLES", "JUEVES", "VIERNES"]
-
-    @State private var bloques: [BloqueHorario] = [
-        BloqueHorario(etiquetaDia: "DIA 2", horaInicio: "07:00", horaFin: "08:00", disponible: false),
-        BloqueHorario(etiquetaDia: "DIA 3", horaInicio: "07:00", horaFin: "08:00", disponible: true),
-        BloqueHorario(etiquetaDia: "DIA 4", horaInicio: "07:00", horaFin: "08:00", disponible: false),
-        BloqueHorario(etiquetaDia: "DIA 5", horaInicio: "07:00", horaFin: "08:00", disponible: false),
-        BloqueHorario(etiquetaDia: "DIA 6", horaInicio: "07:00", horaFin: "08:00", disponible: false),
-
-        BloqueHorario(etiquetaDia: nil, horaInicio: "08:00", horaFin: "09:00", disponible: true),
-        BloqueHorario(etiquetaDia: nil, horaInicio: "08:00", horaFin: "09:00", disponible: false),
-        BloqueHorario(etiquetaDia: nil, horaInicio: "08:00", horaFin: "09:00", disponible: true),
-        BloqueHorario(etiquetaDia: nil, horaInicio: "08:00", horaFin: "09:00", disponible: true),
-        BloqueHorario(etiquetaDia: nil, horaInicio: "08:00", horaFin: "09:00", disponible: true),
-
-        BloqueHorario(etiquetaDia: nil, horaInicio: "09:00", horaFin: "10:00", disponible: false),
-        BloqueHorario(etiquetaDia: nil, horaInicio: "09:00", horaFin: "10:00", disponible: false),
-        BloqueHorario(etiquetaDia: nil, horaInicio: "09:00", horaFin: "10:00", disponible: true),
-        BloqueHorario(etiquetaDia: nil, horaInicio: "09:00", horaFin: "10:00", disponible: true),
-        BloqueHorario(etiquetaDia: nil, horaInicio: "09:00", horaFin: "10:00", disponible: true),
-
-        BloqueHorario(etiquetaDia: nil, horaInicio: "10:00", horaFin: "11:00", disponible: true),
-        BloqueHorario(etiquetaDia: nil, horaInicio: "10:00", horaFin: "11:00", disponible: true),
-        BloqueHorario(etiquetaDia: nil, horaInicio: "10:00", horaFin: "11:00", disponible: true),
-        BloqueHorario(etiquetaDia: nil, horaInicio: "10:00", horaFin: "11:00", disponible: true),
-        BloqueHorario(etiquetaDia: nil, horaInicio: "10:00", horaFin: "11:00", disponible: true),
-
-        BloqueHorario(etiquetaDia: nil, horaInicio: "11:00", horaFin: "12:00", disponible: true),
-        BloqueHorario(etiquetaDia: nil, horaInicio: "11:00", horaFin: "12:00", disponible: true),
-        BloqueHorario(etiquetaDia: nil, horaInicio: "11:00", horaFin: "12:00", disponible: false),
-        BloqueHorario(etiquetaDia: nil, horaInicio: "11:00", horaFin: "12:00", disponible: true),
-        BloqueHorario(etiquetaDia: nil, horaInicio: "11:00", horaFin: "12:00", disponible: true),
-
-        BloqueHorario(etiquetaDia: nil, horaInicio: "12:00", horaFin: "13:00", disponible: true),
-        BloqueHorario(etiquetaDia: nil, horaInicio: "12:00", horaFin: "13:00", disponible: true),
-        BloqueHorario(etiquetaDia: nil, horaInicio: "12:00", horaFin: "13:00", disponible: true),
-        BloqueHorario(etiquetaDia: nil, horaInicio: "12:00", horaFin: "13:00", disponible: true),
-        BloqueHorario(etiquetaDia: nil, horaInicio: "12:00", horaFin: "13:00", disponible: true)
-    ]
-
     private let columnas = Array(repeating: GridItem(.flexible(), spacing: 10), count: 5)
 
     var body: some View {
@@ -70,23 +33,26 @@ struct ReservacionView: View {
 
                 ScrollView(showsIndicators: false) {
                     VStack(spacing: 18) {
-                        Text("Sala Audiovisual E")
+                        Text(salaActual)
                             .font(.system(size: 24, weight: .bold))
                             .foregroundColor(Color(red: 0.10, green: 0.45, blue: 0.67))
                             .padding(.top, 10)
 
-                        // Etiqueta de rol del usuario
                         etiquetaRol
 
+                        leyendaEstados
+
                         HStack {
-                            Text("Marzo de 2026")
+                            Text(mesActualTexto())
                                 .font(.system(size: 24, weight: .bold))
                                 .foregroundColor(.gray)
 
                             Spacer()
 
-                            Button(action: {}) {
-                                Text("Filtrar")
+                            Button(action: {
+                                cargarEstadosDesdeBaseDeDatos()
+                            }) {
+                                Text("Actualizar")
                                     .font(.system(size: 16, weight: .semibold))
                                     .foregroundColor(.gray)
                                     .frame(width: 120, height: 52)
@@ -112,150 +78,46 @@ struct ReservacionView: View {
                             }
                         }
 
-                        // Mensaje de confirmación
                         if mostrarConfirmacion {
-                            HStack {
-                                Image(systemName: "checkmark.circle.fill")
-                                    .foregroundColor(.green)
-                                Text(mensajeConfirmacion)
-                                    .font(.system(size: 14, weight: .medium))
-                                    .foregroundColor(.green)
-                            }
-                            .padding()
-                            .background(Color.green.opacity(0.10))
-                            .cornerRadius(12)
+                            mensajeView
                         }
 
                         botonesAccion
-
                     }
                     .padding(.horizontal, 18)
                     .padding(.bottom, 24)
                 }
             }
         }
-    }
-
-    // MARK: - Etiqueta de rol
-    private var etiquetaRol: some View {
-        HStack {
-            Image(systemName: iconoRol)
-                .foregroundColor(.white)
-            Text("Sesión: \(usuario.nombre) — \(usuario.rol.descripcion)")
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundColor(.white)
-        }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 8)
-        .background(colorRol)
-        .cornerRadius(20)
-    }
-
-    private var iconoRol: String {
-        switch usuario.rol {
-        case .administrador: return "shield.fill"
-        case .directivo: return "star.fill"
-        case .jefatura: return "person.fill"
-        }
-    }
-
-    private var colorRol: Color {
-        switch usuario.rol {
-        case .administrador: return Color(red: 0.10, green: 0.45, blue: 0.67)
-        case .directivo: return Color(red: 0.55, green: 0.20, blue: 0.70)
-        case .jefatura: return Color(red: 0.05, green: 0.55, blue: 0.35)
-        }
-    }
-
-    // MARK: - Botones según rol
-    private var botonesAccion: some View {
-        VStack(spacing: 12) {
-            HStack(spacing: 18) {
-                // Botón principal según rol
-                Button(action: accionPrincipal) {
-                    Text(etiquetaBotonPrincipal)
-                        .font(.system(size: 16, weight: .semibold))
-                        .foregroundColor(.white)
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 56)
-                        .background(colorBotonPrincipal)
-                        .cornerRadius(28)
-                }
-                .disabled(seleccionados.isEmpty)
-                .opacity(seleccionados.isEmpty ? 0.5 : 1.0)
-
-                Button(action: limpiarSeleccion) {
-                    Text("Limpiar")
-                        .font(.system(size: 16, weight: .semibold))
-                        .foregroundColor(.white)
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 56)
-                        .background(Color(red: 1.00, green: 0.34, blue: 0.34))
-                        .cornerRadius(28)
-                }
+        .onAppear {
+            if bloques.isEmpty {
+                bloques = crearBloquesIniciales()
             }
+
+            cargarEstadosDesdeBaseDeDatos()
         }
-        .padding(.top, 6)
-        .padding(.bottom, 24)
-    }
-
-    private var etiquetaBotonPrincipal: String {
-        switch usuario.rol {
-        case .administrador: return "Reservar (Admin)"
-        case .directivo: return "Reservar"
-        case .jefatura: return "Enviar Solicitud"
-        }
-    }
-
-    private var colorBotonPrincipal: Color {
-        switch usuario.rol {
-        case .administrador: return Color(red: 0.10, green: 0.45, blue: 0.67)
-        case .directivo: return Color(red: 0.55, green: 0.20, blue: 0.70)
-        case .jefatura: return Color(red: 0.05, green: 0.75, blue: 0.38)
-        }
-    }
-
-    // MARK: - Acción según rol
-    private func accionPrincipal() {
-        guard !seleccionados.isEmpty else { return }
-
-        let bloquesSeleccionados = bloques.filter { seleccionados.contains($0.id) }
-        let resultado = ReservacionController.shared.procesarAccion(
-            usuario: usuario,
-            bloques: bloquesSeleccionados,
-            sala: "Sala Audiovisual E"
-        )
-
-        mostrarConfirmacion = true
-        mensajeConfirmacion = resultado
-
-        // Marcar bloques como no disponibles si fue autoconfirmado
-        if usuario.rol == .directivo || usuario.rol == .administrador {
-            for id in seleccionados {
-                if let index = bloques.firstIndex(where: { $0.id == id }) {
-                    bloques[index] = BloqueHorario(
-                        etiquetaDia: bloques[index].etiquetaDia,
-                        horaInicio: bloques[index].horaInicio,
-                        horaFin: bloques[index].horaFin,
-                        disponible: false
+        .sheet(isPresented: $mostrarFormularioSolicitud) {
+            FormularioSolicitudView(
+                usuario: usuario,
+                sala: salaActual,
+                bloquesSeleccionados: bloquesParaSolicitud,
+                accionCancelar: {
+                    mostrarFormularioSolicitud = false
+                },
+                accionEnviar: { motivo, microfono, bocina, proyector in
+                    enviarSolicitudJefatura(
+                        motivo: motivo,
+                        necesitaMicrofono: microfono,
+                        necesitaBocina: bocina,
+                        necesitaProyector: proyector
                     )
                 }
-            }
+            )
         }
-
-        seleccionados.removeAll()
-
-        DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
-            mostrarConfirmacion = false
-        }
-    }
-
-    private func limpiarSeleccion() {
-        seleccionados.removeAll()
-        mostrarConfirmacion = false
     }
 
     // MARK: - Barra superior
+
     private var barraSuperior: some View {
         ZStack {
             Color(red: 0.10, green: 0.45, blue: 0.67)
@@ -288,7 +150,67 @@ struct ReservacionView: View {
         .frame(height: 110)
     }
 
-    // MARK: - Tarjeta de horario con selección
+    // MARK: - Rol
+
+    private var etiquetaRol: some View {
+        HStack {
+            Image(systemName: iconoRol)
+                .foregroundColor(.white)
+
+            Text("Sesión: \(usuario.nombre) — \(usuario.rol.descripcion)")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundColor(.white)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 8)
+        .background(colorRol)
+        .cornerRadius(20)
+    }
+
+    private var iconoRol: String {
+        if usuario.rol == .administrador {
+            return "shield.fill"
+        } else if usuario.rol == .directivo {
+            return "star.fill"
+        } else {
+            return "person.fill"
+        }
+    }
+
+    private var colorRol: Color {
+        if usuario.rol == .administrador {
+            return Color(red: 0.10, green: 0.45, blue: 0.67)
+        } else if usuario.rol == .directivo {
+            return Color(red: 0.55, green: 0.20, blue: 0.70)
+        } else {
+            return Color(red: 0.05, green: 0.55, blue: 0.35)
+        }
+    }
+
+    // MARK: - Leyenda
+
+    private var leyendaEstados: some View {
+        HStack(spacing: 10) {
+            itemLeyenda(texto: "Disponible", color: Color(red: 0.05, green: 0.75, blue: 0.38))
+            itemLeyenda(texto: "Apartado", color: .orange)
+            itemLeyenda(texto: "Ocupado", color: Color(red: 1.00, green: 0.34, blue: 0.34))
+        }
+    }
+
+    private func itemLeyenda(texto: String, color: Color) -> some View {
+        HStack(spacing: 6) {
+            Circle()
+                .fill(color)
+                .frame(width: 10, height: 10)
+
+            Text(texto)
+                .font(.system(size: 12, weight: .medium))
+                .foregroundColor(.gray)
+        }
+    }
+
+    // MARK: - Tarjeta de horario
+
     private func tarjetaHorario(index: Int) -> some View {
         let bloque = bloques[index]
         let estaSeleccionado = seleccionados.contains(bloque.id)
@@ -312,6 +234,10 @@ struct ReservacionView: View {
                 .font(.system(size: 15, weight: .bold))
                 .foregroundColor(.white)
 
+            Text(textoEstado(bloque.estado))
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundColor(.white.opacity(0.90))
+
             if estaSeleccionado {
                 Image(systemName: "checkmark.circle.fill")
                     .foregroundColor(.white)
@@ -319,33 +245,306 @@ struct ReservacionView: View {
             }
         }
         .frame(maxWidth: .infinity)
-        .frame(height: 120)
+        .frame(height: 128)
         .background(colorBloque(bloque: bloque, seleccionado: estaSeleccionado))
         .cornerRadius(8)
+        .opacity(puedeSeleccionar(bloque) ? 1.0 : 0.75)
         .onTapGesture {
-            guard bloque.disponible else { return }
-            if estaSeleccionado {
-                seleccionados.remove(bloque.id)
-            } else {
-                seleccionados.insert(bloque.id)
+            seleccionarBloque(bloque)
+        }
+    }
+
+    private func seleccionarBloque(_ bloque: BloqueHorario) {
+        guard puedeSeleccionar(bloque) else {
+            return
+        }
+
+        if seleccionados.contains(bloque.id) {
+            seleccionados.remove(bloque.id)
+        } else {
+            seleccionados.insert(bloque.id)
+        }
+    }
+
+    private func puedeSeleccionar(_ bloque: BloqueHorario) -> Bool {
+        if usuario.rol == .directivo {
+            return bloque.estado == .disponible || bloque.estado == .porConfirmar
+        }
+
+        return bloque.estado == .disponible
+    }
+
+    private func colorBloque(bloque: BloqueHorario, seleccionado: Bool) -> Color {
+        if seleccionado {
+            return Color(red: 0.10, green: 0.45, blue: 0.67)
+        }
+
+        if bloque.estado == .disponible {
+            return Color(red: 0.05, green: 0.75, blue: 0.38)
+        } else if bloque.estado == .porConfirmar {
+            return Color.orange
+        } else {
+            return Color(red: 1.00, green: 0.34, blue: 0.34)
+        }
+    }
+
+    private func textoEstado(_ estado: EstadoBloqueHorario) -> String {
+        if estado == .disponible {
+            return "Disponible"
+        } else if estado == .porConfirmar {
+            return "Apartado"
+        } else {
+            return "Ocupado"
+        }
+    }
+
+    // MARK: - Botones
+
+    private var botonesAccion: some View {
+        VStack(spacing: 12) {
+            HStack(spacing: 18) {
+                Button(action: accionPrincipal) {
+                    Text(etiquetaBotonPrincipal)
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundColor(.white)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 56)
+                        .background(colorBotonPrincipal)
+                        .cornerRadius(28)
+                }
+                .disabled(seleccionados.isEmpty)
+                .opacity(seleccionados.isEmpty ? 0.5 : 1.0)
+
+                Button(action: limpiarSeleccion) {
+                    Text("Limpiar")
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundColor(.white)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 56)
+                        .background(Color(red: 1.00, green: 0.34, blue: 0.34))
+                        .cornerRadius(28)
+                }
+            }
+        }
+        .padding(.top, 6)
+        .padding(.bottom, 24)
+    }
+
+    private var etiquetaBotonPrincipal: String {
+        if usuario.rol == .administrador {
+            return "Reservar"
+        } else if usuario.rol == .directivo {
+            return "Reservar directo"
+        } else {
+            return "Enviar solicitud"
+        }
+    }
+
+    private var colorBotonPrincipal: Color {
+        if usuario.rol == .administrador {
+            return Color(red: 0.10, green: 0.45, blue: 0.67)
+        } else if usuario.rol == .directivo {
+            return Color(red: 0.55, green: 0.20, blue: 0.70)
+        } else {
+            return Color(red: 0.05, green: 0.75, blue: 0.38)
+        }
+    }
+
+    // MARK: - Acciones principales
+
+    private func accionPrincipal() {
+        guard !seleccionados.isEmpty else {
+            return
+        }
+
+        let bloquesSeleccionados = bloques.filter { seleccionados.contains($0.id) }
+
+        if usuario.rol == .jefatura {
+            bloquesParaSolicitud = bloquesSeleccionados
+            mostrarFormularioSolicitud = true
+            return
+        }
+
+        let resultado = ReservacionController.shared.procesarAccion(
+            usuario: usuario,
+            bloques: bloquesSeleccionados,
+            sala: salaActual
+        )
+
+        mensajeConfirmacion = resultado
+        mostrarConfirmacion = true
+
+        if usuario.rol == .administrador || usuario.rol == .directivo {
+            marcarBloquesSeleccionadosComo(.ocupado)
+        }
+
+        seleccionados.removeAll()
+
+        ocultarMensajeDespues()
+    }
+
+    private func enviarSolicitudJefatura(
+        motivo: String,
+        necesitaMicrofono: Bool,
+        necesitaBocina: Bool,
+        necesitaProyector: Bool
+    ) {
+        guard !bloquesParaSolicitud.isEmpty else {
+            mensajeConfirmacion = "Selecciona al menos un horario."
+            mostrarConfirmacion = true
+            return
+        }
+
+        let fecha = bloquesParaSolicitud.first?.fecha ?? fechaActualTexto()
+        let horaInicio = bloquesParaSolicitud.first?.horaInicio ?? ""
+        let horaFin = bloquesParaSolicitud.last?.horaFin ?? ""
+
+        let exito = DatabaseManager.shared.insertarSolicitud(
+            usuarioId: usuario.id,
+            usuario: usuario.nombre,
+            correo: usuario.correo,
+            sala: salaActual,
+            fecha: fecha,
+            horaInicio: horaInicio,
+            horaFin: horaFin,
+            motivo: motivo,
+            necesitaMicrofono: necesitaMicrofono,
+            necesitaBocina: necesitaBocina,
+            necesitaProyector: necesitaProyector,
+            estado: .porConfirmar
+        )
+
+        mostrarFormularioSolicitud = false
+        mostrarConfirmacion = true
+
+        if exito {
+            mensajeConfirmacion = "📋 Solicitud enviada. El horario quedó apartado."
+            marcarBloquesSeleccionadosComo(.porConfirmar)
+        } else {
+            mensajeConfirmacion = "❌ Error al enviar la solicitud."
+        }
+
+        seleccionados.removeAll()
+        bloquesParaSolicitud.removeAll()
+
+        ocultarMensajeDespues()
+    }
+
+    private func limpiarSeleccion() {
+        seleccionados.removeAll()
+        mostrarConfirmacion = false
+    }
+
+    private func marcarBloquesSeleccionadosComo(_ estado: EstadoBloqueHorario) {
+        for id in seleccionados {
+            if let index = bloques.firstIndex(where: { $0.id == id }) {
+                bloques[index].estado = estado
             }
         }
     }
 
-    private func colorBloque(bloque: BloqueHorario, seleccionado: Bool) -> Color {
-        if !bloque.disponible {
-            return Color(red: 1.00, green: 0.34, blue: 0.34)
+    private func ocultarMensajeDespues() {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
+            mostrarConfirmacion = false
         }
-        if seleccionado {
-            return Color(red: 0.10, green: 0.45, blue: 0.67)
+    }
+
+    // MARK: - Mensaje
+
+    private var mensajeView: some View {
+        HStack {
+            Image(systemName: mensajeConfirmacion.contains("❌") ? "xmark.circle.fill" : "checkmark.circle.fill")
+                .foregroundColor(mensajeConfirmacion.contains("❌") ? .red : .green)
+
+            Text(mensajeConfirmacion)
+                .font(.system(size: 14, weight: .medium))
+                .foregroundColor(mensajeConfirmacion.contains("❌") ? .red : .green)
         }
-        return Color(red: 0.05, green: 0.75, blue: 0.38)
+        .padding()
+        .background(
+            mensajeConfirmacion.contains("❌")
+            ? Color.red.opacity(0.10)
+            : Color.green.opacity(0.10)
+        )
+        .cornerRadius(12)
+    }
+
+    // MARK: - Cargar horarios
+
+    private func crearBloquesIniciales() -> [BloqueHorario] {
+        let fecha = fechaActualTexto()
+
+        return [
+            BloqueHorario(etiquetaDia: "DIA 2", fecha: fecha, horaInicio: "07:00", horaFin: "08:00", estado: .disponible),
+            BloqueHorario(etiquetaDia: "DIA 3", fecha: fecha, horaInicio: "07:00", horaFin: "08:00", estado: .disponible),
+            BloqueHorario(etiquetaDia: "DIA 4", fecha: fecha, horaInicio: "07:00", horaFin: "08:00", estado: .disponible),
+            BloqueHorario(etiquetaDia: "DIA 5", fecha: fecha, horaInicio: "07:00", horaFin: "08:00", estado: .disponible),
+            BloqueHorario(etiquetaDia: "DIA 6", fecha: fecha, horaInicio: "07:00", horaFin: "08:00", estado: .disponible),
+
+            BloqueHorario(etiquetaDia: nil, fecha: fecha, horaInicio: "08:00", horaFin: "09:00", estado: .disponible),
+            BloqueHorario(etiquetaDia: nil, fecha: fecha, horaInicio: "08:00", horaFin: "09:00", estado: .disponible),
+            BloqueHorario(etiquetaDia: nil, fecha: fecha, horaInicio: "08:00", horaFin: "09:00", estado: .disponible),
+            BloqueHorario(etiquetaDia: nil, fecha: fecha, horaInicio: "08:00", horaFin: "09:00", estado: .disponible),
+            BloqueHorario(etiquetaDia: nil, fecha: fecha, horaInicio: "08:00", horaFin: "09:00", estado: .disponible),
+
+            BloqueHorario(etiquetaDia: nil, fecha: fecha, horaInicio: "09:00", horaFin: "10:00", estado: .disponible),
+            BloqueHorario(etiquetaDia: nil, fecha: fecha, horaInicio: "09:00", horaFin: "10:00", estado: .disponible),
+            BloqueHorario(etiquetaDia: nil, fecha: fecha, horaInicio: "09:00", horaFin: "10:00", estado: .disponible),
+            BloqueHorario(etiquetaDia: nil, fecha: fecha, horaInicio: "09:00", horaFin: "10:00", estado: .disponible),
+            BloqueHorario(etiquetaDia: nil, fecha: fecha, horaInicio: "09:00", horaFin: "10:00", estado: .disponible),
+
+            BloqueHorario(etiquetaDia: nil, fecha: fecha, horaInicio: "10:00", horaFin: "11:00", estado: .disponible),
+            BloqueHorario(etiquetaDia: nil, fecha: fecha, horaInicio: "10:00", horaFin: "11:00", estado: .disponible),
+            BloqueHorario(etiquetaDia: nil, fecha: fecha, horaInicio: "10:00", horaFin: "11:00", estado: .disponible),
+            BloqueHorario(etiquetaDia: nil, fecha: fecha, horaInicio: "10:00", horaFin: "11:00", estado: .disponible),
+            BloqueHorario(etiquetaDia: nil, fecha: fecha, horaInicio: "10:00", horaFin: "11:00", estado: .disponible),
+
+            BloqueHorario(etiquetaDia: nil, fecha: fecha, horaInicio: "11:00", horaFin: "12:00", estado: .disponible),
+            BloqueHorario(etiquetaDia: nil, fecha: fecha, horaInicio: "11:00", horaFin: "12:00", estado: .disponible),
+            BloqueHorario(etiquetaDia: nil, fecha: fecha, horaInicio: "11:00", horaFin: "12:00", estado: .disponible),
+            BloqueHorario(etiquetaDia: nil, fecha: fecha, horaInicio: "11:00", horaFin: "12:00", estado: .disponible),
+            BloqueHorario(etiquetaDia: nil, fecha: fecha, horaInicio: "11:00", horaFin: "12:00", estado: .disponible)
+        ]
+    }
+
+    private func cargarEstadosDesdeBaseDeDatos() {
+        for index in bloques.indices {
+            let bloque = bloques[index]
+
+            bloques[index].estado = DatabaseManager.shared.estadoHorario(
+                sala: salaActual,
+                fecha: bloque.fecha,
+                horaInicio: bloque.horaInicio,
+                horaFin: bloque.horaFin
+            )
+        }
+    }
+
+    // MARK: - Fechas
+
+    private func fechaActualTexto() -> String {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .long
+        formatter.locale = Locale(identifier: "es_MX")
+        return formatter.string(from: Date())
+    }
+
+    private func mesActualTexto() -> String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "es_MX")
+        formatter.setLocalizedDateFormatFromTemplate("MMMM yyyy")
+        return formatter.string(from: Date()).capitalized
     }
 }
 
 #Preview {
     ReservacionView(
-        usuario: Usuario(id: 1, nombre: "Admin", correo: "admin@test.com", rol: .administrador),
+        usuario: Usuario(
+            id: 1,
+            nombre: "Administrador",
+            correo: "admin@tuxtla.tecnm.mx",
+            rol: .administrador
+        ),
         accionAbrirMenu: {},
         accionCerrarSesion: {}
     )

@@ -71,7 +71,8 @@ class ReservacionController {
                 motivo: "Reservación de sala audiovisual",
                 necesitaMicrofono: false,
                 necesitaBocina: false,
-                necesitaProyector: false
+                necesitaProyector: false,
+                estado: .porConfirmar
             )
 
             return exito
