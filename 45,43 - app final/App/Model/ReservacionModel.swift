@@ -23,7 +23,9 @@ struct Reservacion: Identifiable {
     let horaInicio: String
     let horaFin: String
     let tipo: TipoReservacion
+    
 }
+
 
 // MARK: - Bloque de horario para el calendario
 

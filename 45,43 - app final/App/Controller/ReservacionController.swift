@@ -53,6 +53,8 @@ class ReservacionController {
                 horaInicio: horaInicio,
                 horaFin: horaFin,
                 tipo: .confirmada
+                
+                
             )
 
             return exito

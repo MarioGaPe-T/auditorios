@@ -15,6 +15,7 @@ enum EstadoSolicitud: String {
     case porConfirmar = "por_confirmar"
 }
 
+
 // MARK: - Solicitud completa
 struct Solicitud: Identifiable {
     let id: Int

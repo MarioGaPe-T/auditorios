@@ -155,10 +155,12 @@ struct SolicitudesView: View {
         .cornerRadius(16)
     }
 
+    
     // MARK: - Estado
     private func estadoView(_ estado: EstadoSolicitud) -> some View {
         let texto: String
         let color: Color
+        
 
         switch estado {
         case .pendiente:

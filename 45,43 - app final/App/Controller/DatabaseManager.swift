@@ -86,6 +86,7 @@ class DatabaseManager {
         ejecutarSQL(sqlReservaciones)
     }
 
+    
     // MARK: - Usuarios precargados
     private func insertarUsuariosPrecargados() {
         let usuarios: [(nombre: String, correo: String, contrasena: String, rol: String)] = [
