@@ -134,9 +134,13 @@ struct LoginView: View {
     // MARK: - Lógica de login
     private func iniciarSesion() {
         mostrarError = false
+        mensajeError = ""
 
-        // Validaciones básicas
-        guard !correo.trimmingCharacters(in: .whitespaces).isEmpty else {
+        let correoLimpio = correo
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+
+        guard !correoLimpio.isEmpty else {
             mensajeError = "Ingresa tu correo electrónico."
             mostrarError = true
             return
@@ -150,23 +154,22 @@ struct LoginView: View {
 
         cargando = true
 
-        // Autenticación contra SQLite
-        DispatchQueue.global().async {
-            let resultado = AuthManager.shared.iniciarSesion(
-                correo: correo.trimmingCharacters(in: .whitespaces).lowercased(),
-                contrasena: contrasena
-            )
+        let resultado = AuthManager.shared.iniciarSesion(
+            correo: correoLimpio,
+            contrasena: contrasena
+        )
 
-            DispatchQueue.main.async {
-                cargando = false
-                switch resultado {
-                case .success(let usuario):
-                    accionIngresar(usuario)
-                case .failure(let error):
-                    mensajeError = error.descripcion
-                    mostrarError = true
-                }
-            }
+        cargando = false
+
+        switch resultado {
+        case .success(let usuario):
+            print("✅ Login exitoso: \(usuario.nombre) - \(usuario.rol.descripcion)")
+            accionIngresar(usuario)
+
+        case .failure(let error):
+            print("❌ Error login: \(error.descripcion)")
+            mensajeError = error.descripcion
+            mostrarError = true
         }
     }
 }

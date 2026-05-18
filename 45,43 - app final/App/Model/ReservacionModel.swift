@@ -34,7 +34,6 @@ enum EstadoBloqueHorario {
     case disponible
     case porConfirmar
     case ocupado
-    case seleccionado
 }
 
 struct BloqueHorario: Identifiable {

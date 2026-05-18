@@ -3,12 +3,20 @@
 //  45,43 - app final
 //
 
+//
+//  ReservacionView.swift
+//  45,43 - app final
+//
+
 import SwiftUI
 
 struct ReservacionView: View {
     let usuario: Usuario
     let accionAbrirMenu: () -> Void
     let accionCerrarSesion: () -> Void
+
+    @State private var fechaSeleccionada = Date()
+    @State private var mostrarCalendario = false
 
     @State private var seleccionados: Set<UUID> = []
     @State private var bloques: [BloqueHorario] = []
@@ -20,7 +28,6 @@ struct ReservacionView: View {
     @State private var bloquesParaSolicitud: [BloqueHorario] = []
 
     private let salaActual = "Sala Audiovisual E"
-    private let dias = ["LUNES", "MARTES", "MIÉRCOLES", "JUEVES", "VIERNES"]
     private let columnas = Array(repeating: GridItem(.flexible(), spacing: 10), count: 5)
 
     var body: some View {
@@ -42,35 +49,9 @@ struct ReservacionView: View {
 
                         leyendaEstados
 
-                        HStack {
-                            Text(mesActualTexto())
-                                .font(.system(size: 24, weight: .bold))
-                                .foregroundColor(.gray)
+                        selectorSemana
 
-                            Spacer()
-
-                            Button(action: {
-                                cargarEstadosDesdeBaseDeDatos()
-                            }) {
-                                Text("Actualizar")
-                                    .font(.system(size: 16, weight: .semibold))
-                                    .foregroundColor(.gray)
-                                    .frame(width: 120, height: 52)
-                                    .background(Color(red: 0.84, green: 0.84, blue: 0.84))
-                                    .cornerRadius(25)
-                            }
-                        }
-
-                        LazyVGrid(columns: columnas, spacing: 10) {
-                            ForEach(dias, id: \.self) { dia in
-                                Text(dia)
-                                    .font(.system(size: 10, weight: .bold))
-                                    .foregroundColor(.white)
-                                    .frame(maxWidth: .infinity)
-                                    .frame(height: 60)
-                                    .background(Color.gray)
-                            }
-                        }
+                        encabezadoDiasSemana
 
                         LazyVGrid(columns: columnas, spacing: 12) {
                             ForEach(bloques.indices, id: \.self) { index in
@@ -90,11 +71,41 @@ struct ReservacionView: View {
             }
         }
         .onAppear {
-            if bloques.isEmpty {
-                bloques = crearBloquesIniciales()
-            }
-
+            bloques = crearBloquesDeSemana(fechaBase: fechaSeleccionada)
             cargarEstadosDesdeBaseDeDatos()
+        }
+        .sheet(isPresented: $mostrarCalendario) {
+            NavigationView {
+                VStack(spacing: 18) {
+                    DatePicker(
+                        "Selecciona una fecha",
+                        selection: $fechaSeleccionada,
+                        in: Calendar.current.startOfDay(for: Date())...,
+                        displayedComponents: .date
+                    )
+                    .datePickerStyle(.graphical)
+                    .padding()
+
+                    Button(action: {
+                        bloques = crearBloquesDeSemana(fechaBase: fechaSeleccionada)
+                        seleccionados.removeAll()
+                        cargarEstadosDesdeBaseDeDatos()
+                        mostrarCalendario = false
+                    }) {
+                        Text("Aceptar")
+                            .font(.system(size: 18, weight: .semibold))
+                            .foregroundColor(.white)
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 54)
+                            .background(Color(red: 0.10, green: 0.45, blue: 0.67))
+                            .cornerRadius(28)
+                    }
+                    .padding(.horizontal, 24)
+
+                    Spacer()
+                }
+                .navigationTitle("Calendario")
+            }
         }
         .sheet(isPresented: $mostrarFormularioSolicitud) {
             FormularioSolicitudView(
@@ -187,6 +198,62 @@ struct ReservacionView: View {
         }
     }
 
+    // MARK: - Selector de semana
+
+    private var selectorSemana: some View {
+        HStack {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(mesActualTexto())
+                    .font(.system(size: 24, weight: .bold))
+                    .foregroundColor(Color(red: 0.10, green: 0.45, blue: 0.67))
+
+                Text(rangoSemanaTexto())
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundColor(.gray)
+            }
+
+            Spacer()
+
+            Button(action: {
+                mostrarCalendario = true
+            }) {
+                Text("Elegir fecha")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundColor(.white)
+                    .frame(width: 130, height: 52)
+                    .background(Color(red: 0.10, green: 0.45, blue: 0.67))
+                    .cornerRadius(25)
+            }
+        }
+    }
+
+    private var encabezadoDiasSemana: some View {
+        LazyVGrid(columns: columnas, spacing: 10) {
+            ForEach(encabezadosSemana, id: \.self) { dia in
+                Text(dia)
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundColor(.white)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 60)
+                    .background(Color.gray)
+            }
+        }
+    }
+
+    private var encabezadosSemana: [String] {
+        let calendario = Calendar.current
+        let lunes = obtenerLunesDeSemana(fechaSeleccionada)
+
+        return (0..<5).compactMap { dia in
+            guard let fechaDia = calendario.date(byAdding: .day, value: dia, to: lunes) else {
+                return nil
+            }
+
+            return etiquetaEncabezado(fechaDia)
+        }
+    }
+
     // MARK: - Leyenda
 
     private var leyendaEstados: some View {
@@ -216,12 +283,6 @@ struct ReservacionView: View {
         let estaSeleccionado = seleccionados.contains(bloque.id)
 
         return VStack(spacing: 6) {
-            if let etiqueta = bloque.etiquetaDia {
-                Text(etiqueta)
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundColor(.white)
-            }
-
             Text(bloque.horaInicio)
                 .font(.system(size: 15, weight: .bold))
                 .foregroundColor(.white)
@@ -245,10 +306,10 @@ struct ReservacionView: View {
             }
         }
         .frame(maxWidth: .infinity)
-        .frame(height: 128)
+        .frame(height: 120)
         .background(colorBloque(bloque: bloque, seleccionado: estaSeleccionado))
         .cornerRadius(8)
-        .opacity(puedeSeleccionar(bloque) ? 1.0 : 0.75)
+        .opacity(puedeSeleccionar(bloque) ? 1.0 : 0.60)
         .onTapGesture {
             seleccionarBloque(bloque)
         }
@@ -259,6 +320,13 @@ struct ReservacionView: View {
             return
         }
 
+        // Evita mezclar horarios de diferentes días en una sola solicitud/reservación.
+        if let primerId = seleccionados.first,
+           let primerBloque = bloques.first(where: { $0.id == primerId }),
+           primerBloque.fecha != bloque.fecha {
+            seleccionados.removeAll()
+        }
+
         if seleccionados.contains(bloque.id) {
             seleccionados.remove(bloque.id)
         } else {
@@ -267,6 +335,10 @@ struct ReservacionView: View {
     }
 
     private func puedeSeleccionar(_ bloque: BloqueHorario) -> Bool {
+        if esFechaISOAnteriorAHoy(bloque.fecha) {
+            return false
+        }
+
         if usuario.rol == .directivo {
             return bloque.estado == .disponible || bloque.estado == .porConfirmar
         }
@@ -277,6 +349,10 @@ struct ReservacionView: View {
     private func colorBloque(bloque: BloqueHorario, seleccionado: Bool) -> Color {
         if seleccionado {
             return Color(red: 0.10, green: 0.45, blue: 0.67)
+        }
+
+        if esFechaISOAnteriorAHoy(bloque.fecha) {
+            return Color(red: 1.00, green: 0.34, blue: 0.34)
         }
 
         if bloque.estado == .disponible {
@@ -357,7 +433,7 @@ struct ReservacionView: View {
             return
         }
 
-        let bloquesSeleccionados = bloques.filter { seleccionados.contains($0.id) }
+        let bloquesSeleccionados = bloquesSeleccionadosOrdenados()
 
         if usuario.rol == .jefatura {
             bloquesParaSolicitud = bloquesSeleccionados
@@ -365,20 +441,37 @@ struct ReservacionView: View {
             return
         }
 
-        let resultado = ReservacionController.shared.procesarAccion(
-            usuario: usuario,
-            bloques: bloquesSeleccionados,
-            sala: salaActual
-        )
+        reservarDirectamente(bloquesSeleccionados)
+    }
 
-        mensajeConfirmacion = resultado
-        mostrarConfirmacion = true
-
-        if usuario.rol == .administrador || usuario.rol == .directivo {
-            marcarBloquesSeleccionadosComo(.ocupado)
+    private func reservarDirectamente(_ bloquesSeleccionados: [BloqueHorario]) {
+        guard let primerBloque = bloquesSeleccionados.first,
+              let ultimoBloque = bloquesSeleccionados.last else {
+            return
         }
 
-        seleccionados.removeAll()
+        let exito = DatabaseManager.shared.insertarReservacion(
+            usuarioId: usuario.id,
+            nombreUsuario: usuario.nombre,
+            sala: salaActual,
+            fecha: primerBloque.fecha,
+            horaInicio: primerBloque.horaInicio,
+            horaFin: ultimoBloque.horaFin,
+            tipo: .confirmada
+        )
+
+        mostrarConfirmacion = true
+
+        if exito {
+            mensajeConfirmacion = usuario.rol == .directivo
+            ? "✅ Reservación confirmada automáticamente."
+            : "✅ Reservación confirmada."
+
+            seleccionados.removeAll()
+            cargarEstadosDesdeBaseDeDatos()
+        } else {
+            mensajeConfirmacion = "❌ Error al guardar la reservación."
+        }
 
         ocultarMensajeDespues()
     }
@@ -389,24 +482,28 @@ struct ReservacionView: View {
         necesitaBocina: Bool,
         necesitaProyector: Bool
     ) {
-        guard !bloquesParaSolicitud.isEmpty else {
+        let bloquesOrdenados = bloquesParaSolicitud.sorted {
+            if $0.fecha == $1.fecha {
+                return $0.horaInicio < $1.horaInicio
+            }
+            return $0.fecha < $1.fecha
+        }
+
+        guard let primerBloque = bloquesOrdenados.first,
+              let ultimoBloque = bloquesOrdenados.last else {
             mensajeConfirmacion = "Selecciona al menos un horario."
             mostrarConfirmacion = true
             return
         }
-
-        let fecha = bloquesParaSolicitud.first?.fecha ?? fechaActualTexto()
-        let horaInicio = bloquesParaSolicitud.first?.horaInicio ?? ""
-        let horaFin = bloquesParaSolicitud.last?.horaFin ?? ""
 
         let exito = DatabaseManager.shared.insertarSolicitud(
             usuarioId: usuario.id,
             usuario: usuario.nombre,
             correo: usuario.correo,
             sala: salaActual,
-            fecha: fecha,
-            horaInicio: horaInicio,
-            horaFin: horaFin,
+            fecha: primerBloque.fecha,
+            horaInicio: primerBloque.horaInicio,
+            horaFin: ultimoBloque.horaFin,
             motivo: motivo,
             necesitaMicrofono: necesitaMicrofono,
             necesitaBocina: necesitaBocina,
@@ -419,28 +516,31 @@ struct ReservacionView: View {
 
         if exito {
             mensajeConfirmacion = "📋 Solicitud enviada. El horario quedó apartado."
-            marcarBloquesSeleccionadosComo(.porConfirmar)
+            seleccionados.removeAll()
+            bloquesParaSolicitud.removeAll()
+            cargarEstadosDesdeBaseDeDatos()
         } else {
             mensajeConfirmacion = "❌ Error al enviar la solicitud."
         }
 
-        seleccionados.removeAll()
-        bloquesParaSolicitud.removeAll()
-
         ocultarMensajeDespues()
+    }
+
+    private func bloquesSeleccionadosOrdenados() -> [BloqueHorario] {
+        return bloques
+            .filter { seleccionados.contains($0.id) }
+            .sorted {
+                if $0.fecha == $1.fecha {
+                    return $0.horaInicio < $1.horaInicio
+                }
+
+                return $0.fecha < $1.fecha
+            }
     }
 
     private func limpiarSeleccion() {
         seleccionados.removeAll()
         mostrarConfirmacion = false
-    }
-
-    private func marcarBloquesSeleccionadosComo(_ estado: EstadoBloqueHorario) {
-        for id in seleccionados {
-            if let index = bloques.firstIndex(where: { $0.id == id }) {
-                bloques[index].estado = estado
-            }
-        }
     }
 
     private func ocultarMensajeDespues() {
@@ -469,71 +569,144 @@ struct ReservacionView: View {
         .cornerRadius(12)
     }
 
-    // MARK: - Cargar horarios
+    // MARK: - Crear horarios
 
-    private func crearBloquesIniciales() -> [BloqueHorario] {
-        let fecha = fechaActualTexto()
+    private func crearBloquesDeSemana(fechaBase: Date) -> [BloqueHorario] {
+        let calendario = Calendar.current
+        let lunes = obtenerLunesDeSemana(fechaBase)
 
-        return [
-            BloqueHorario(etiquetaDia: "DIA 2", fecha: fecha, horaInicio: "07:00", horaFin: "08:00", estado: .disponible),
-            BloqueHorario(etiquetaDia: "DIA 3", fecha: fecha, horaInicio: "07:00", horaFin: "08:00", estado: .disponible),
-            BloqueHorario(etiquetaDia: "DIA 4", fecha: fecha, horaInicio: "07:00", horaFin: "08:00", estado: .disponible),
-            BloqueHorario(etiquetaDia: "DIA 5", fecha: fecha, horaInicio: "07:00", horaFin: "08:00", estado: .disponible),
-            BloqueHorario(etiquetaDia: "DIA 6", fecha: fecha, horaInicio: "07:00", horaFin: "08:00", estado: .disponible),
-
-            BloqueHorario(etiquetaDia: nil, fecha: fecha, horaInicio: "08:00", horaFin: "09:00", estado: .disponible),
-            BloqueHorario(etiquetaDia: nil, fecha: fecha, horaInicio: "08:00", horaFin: "09:00", estado: .disponible),
-            BloqueHorario(etiquetaDia: nil, fecha: fecha, horaInicio: "08:00", horaFin: "09:00", estado: .disponible),
-            BloqueHorario(etiquetaDia: nil, fecha: fecha, horaInicio: "08:00", horaFin: "09:00", estado: .disponible),
-            BloqueHorario(etiquetaDia: nil, fecha: fecha, horaInicio: "08:00", horaFin: "09:00", estado: .disponible),
-
-            BloqueHorario(etiquetaDia: nil, fecha: fecha, horaInicio: "09:00", horaFin: "10:00", estado: .disponible),
-            BloqueHorario(etiquetaDia: nil, fecha: fecha, horaInicio: "09:00", horaFin: "10:00", estado: .disponible),
-            BloqueHorario(etiquetaDia: nil, fecha: fecha, horaInicio: "09:00", horaFin: "10:00", estado: .disponible),
-            BloqueHorario(etiquetaDia: nil, fecha: fecha, horaInicio: "09:00", horaFin: "10:00", estado: .disponible),
-            BloqueHorario(etiquetaDia: nil, fecha: fecha, horaInicio: "09:00", horaFin: "10:00", estado: .disponible),
-
-            BloqueHorario(etiquetaDia: nil, fecha: fecha, horaInicio: "10:00", horaFin: "11:00", estado: .disponible),
-            BloqueHorario(etiquetaDia: nil, fecha: fecha, horaInicio: "10:00", horaFin: "11:00", estado: .disponible),
-            BloqueHorario(etiquetaDia: nil, fecha: fecha, horaInicio: "10:00", horaFin: "11:00", estado: .disponible),
-            BloqueHorario(etiquetaDia: nil, fecha: fecha, horaInicio: "10:00", horaFin: "11:00", estado: .disponible),
-            BloqueHorario(etiquetaDia: nil, fecha: fecha, horaInicio: "10:00", horaFin: "11:00", estado: .disponible),
-
-            BloqueHorario(etiquetaDia: nil, fecha: fecha, horaInicio: "11:00", horaFin: "12:00", estado: .disponible),
-            BloqueHorario(etiquetaDia: nil, fecha: fecha, horaInicio: "11:00", horaFin: "12:00", estado: .disponible),
-            BloqueHorario(etiquetaDia: nil, fecha: fecha, horaInicio: "11:00", horaFin: "12:00", estado: .disponible),
-            BloqueHorario(etiquetaDia: nil, fecha: fecha, horaInicio: "11:00", horaFin: "12:00", estado: .disponible),
-            BloqueHorario(etiquetaDia: nil, fecha: fecha, horaInicio: "11:00", horaFin: "12:00", estado: .disponible)
+        let horarios: [(String, String)] = [
+            ("07:00", "08:00"),
+            ("08:00", "09:00"),
+            ("09:00", "10:00"),
+            ("10:00", "11:00"),
+            ("11:00", "12:00"),
+            ("12:00", "13:00"),
+            ("13:00", "14:00")
         ]
+
+        var nuevosBloques: [BloqueHorario] = []
+
+        for horario in horarios {
+            for dia in 0..<5 {
+                guard let fechaDia = calendario.date(byAdding: .day, value: dia, to: lunes) else {
+                    continue
+                }
+
+                let fechaISO = formatearFechaISO(fechaDia)
+
+                let estadoInicial: EstadoBloqueHorario = esFechaAnterior(fechaDia)
+                ? .ocupado
+                : .disponible
+
+                nuevosBloques.append(
+                    BloqueHorario(
+                        etiquetaDia: nil,
+                        fecha: fechaISO,
+                        horaInicio: horario.0,
+                        horaFin: horario.1,
+                        estado: estadoInicial
+                    )
+                )
+            }
+        }
+
+        return nuevosBloques
     }
 
     private func cargarEstadosDesdeBaseDeDatos() {
         for index in bloques.indices {
             let bloque = bloques[index]
 
-            bloques[index].estado = DatabaseManager.shared.estadoHorario(
-                sala: salaActual,
-                fecha: bloque.fecha,
-                horaInicio: bloque.horaInicio,
-                horaFin: bloque.horaFin
-            )
+            if esFechaISOAnteriorAHoy(bloque.fecha) {
+                bloques[index].estado = .ocupado
+            } else {
+                bloques[index].estado = DatabaseManager.shared.estadoHorario(
+                    sala: salaActual,
+                    fecha: bloque.fecha,
+                    horaInicio: bloque.horaInicio,
+                    horaFin: bloque.horaFin
+                )
+            }
         }
     }
 
     // MARK: - Fechas
 
-    private func fechaActualTexto() -> String {
+    private func obtenerLunesDeSemana(_ fecha: Date) -> Date {
+        var calendario = Calendar.current
+        calendario.firstWeekday = 2
+
+        let componentes = calendario.dateComponents(
+            [.yearForWeekOfYear, .weekOfYear],
+            from: fecha
+        )
+
+        return calendario.date(from: componentes) ?? fecha
+    }
+
+    private func formatearFechaISO(_ fecha: Date) -> String {
         let formatter = DateFormatter()
-        formatter.dateStyle = .long
-        formatter.locale = Locale(identifier: "es_MX")
-        return formatter.string(from: Date())
+        formatter.dateFormat = "yyyy-MM-dd"
+        return formatter.string(from: fecha)
+    }
+
+    private func fechaDesdeISO(_ texto: String) -> Date? {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd"
+        return formatter.date(from: texto)
+    }
+
+    private func etiquetaEncabezado(_ fecha: Date) -> String {
+        let formatterDia = DateFormatter()
+        formatterDia.locale = Locale(identifier: "es_MX")
+        formatterDia.dateFormat = "EEEE"
+
+        let formatterFecha = DateFormatter()
+        formatterFecha.dateFormat = "dd/MM"
+
+        let dia = formatterDia.string(from: fecha).uppercased()
+        let fechaTexto = formatterFecha.string(from: fecha)
+
+        return "\(dia)\n\(fechaTexto)"
+    }
+
+    private func esFechaAnterior(_ fecha: Date) -> Bool {
+        let calendario = Calendar.current
+        let hoy = calendario.startOfDay(for: Date())
+        let fechaComparar = calendario.startOfDay(for: fecha)
+
+        return fechaComparar < hoy
+    }
+
+    private func esFechaISOAnteriorAHoy(_ fechaISO: String) -> Bool {
+        guard let fecha = fechaDesdeISO(fechaISO) else {
+            return false
+        }
+
+        return esFechaAnterior(fecha)
     }
 
     private func mesActualTexto() -> String {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "es_MX")
         formatter.setLocalizedDateFormatFromTemplate("MMMM yyyy")
-        return formatter.string(from: Date()).capitalized
+        return formatter.string(from: fechaSeleccionada).capitalized
+    }
+
+    private func rangoSemanaTexto() -> String {
+        let calendario = Calendar.current
+        let lunes = obtenerLunesDeSemana(fechaSeleccionada)
+
+        guard let viernes = calendario.date(byAdding: .day, value: 4, to: lunes) else {
+            return ""
+        }
+
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "es_MX")
+        formatter.dateFormat = "dd/MM/yyyy"
+
+        return "\(formatter.string(from: lunes)) - \(formatter.string(from: viernes))"
     }
 }
 

@@ -2,8 +2,6 @@
 //  DatabaseManager.swift
 //  45,43 - app final
 //
-//  Created by Alumno on 15/04/26.
-//
 
 import Foundation
 import SQLite3
@@ -27,12 +25,15 @@ class DatabaseManager {
             in: .userDomainMask
         ).first!
 
-        let rutaDB = rutaDocumentos.appendingPathComponent("audiovisual.sqlite")
+        // Cambié el nombre para evitar conflictos con tablas viejas del simulador.
+        // Si quieres conservar tu base anterior, vuelve a "audiovisual.sqlite".
+        let rutaDB = rutaDocumentos.appendingPathComponent("audiovisual_v4.sqlite")
 
         if sqlite3_open(rutaDB.path, &db) != SQLITE_OK {
             print("❌ Error al abrir la base de datos: \(String(cString: sqlite3_errmsg(db)))")
         } else {
             print("✅ Base de datos abierta en: \(rutaDB.path)")
+            ejecutarSQL("PRAGMA foreign_keys = ON;")
         }
     }
 
@@ -86,17 +87,15 @@ class DatabaseManager {
         ejecutarSQL(sqlReservaciones)
     }
 
-    
     // MARK: - Usuarios precargados
     private func insertarUsuariosPrecargados() {
         let usuarios: [(nombre: String, correo: String, contrasena: String, rol: String)] = [
-            ("Administrador",   "admin@tuxtla.tecnm.mx",     "admin123", "administrador"),
-            ("Dir. General",    "directivo@tuxtla.tecnm.mx", "dir123",   "directivo"),
-            ("Jefe de Área",    "jefatura@tuxtla.tecnm.mx",  "jef123",   "jefatura")
+            ("Administrador", "admin@tuxtla.tecnm.mx", "admin123", "administrador"),
+            ("Dir. General", "directivo@tuxtla.tecnm.mx", "dir123", "directivo"),
+            ("Jefe de Área", "jefatura@tuxtla.tecnm.mx", "jef123", "jefatura")
         ]
 
         for usuario in usuarios {
-            // Solo insertar si el correo no existe
             let sqlVerificar = "SELECT COUNT(*) FROM usuarios WHERE correo = ?;"
             var statement: OpaquePointer?
 
@@ -112,15 +111,20 @@ class DatabaseManager {
                             INSERT INTO usuarios (nombre, correo, contrasena, rol)
                             VALUES (?, ?, ?, ?);
                         """
+
                         var insertStatement: OpaquePointer?
+
                         if sqlite3_prepare_v2(db, sqlInsertar, -1, &insertStatement, nil) == SQLITE_OK {
-                            sqlite3_bind_text(insertStatement, 1, (usuario.nombre     as NSString).utf8String, -1, nil)
-                            sqlite3_bind_text(insertStatement, 2, (usuario.correo     as NSString).utf8String, -1, nil)
+                            sqlite3_bind_text(insertStatement, 1, (usuario.nombre as NSString).utf8String, -1, nil)
+                            sqlite3_bind_text(insertStatement, 2, (usuario.correo as NSString).utf8String, -1, nil)
                             sqlite3_bind_text(insertStatement, 3, (usuario.contrasena as NSString).utf8String, -1, nil)
-                            sqlite3_bind_text(insertStatement, 4, (usuario.rol        as NSString).utf8String, -1, nil)
-                            sqlite3_step(insertStatement)
+                            sqlite3_bind_text(insertStatement, 4, (usuario.rol as NSString).utf8String, -1, nil)
+
+                            if sqlite3_step(insertStatement) == SQLITE_DONE {
+                                print("✅ Usuario precargado: \(usuario.correo)")
+                            }
+
                             sqlite3_finalize(insertStatement)
-                            print("✅ Usuario precargado: \(usuario.correo)")
                         }
                     }
                 } else {
@@ -133,12 +137,22 @@ class DatabaseManager {
     // MARK: - Ejecutar SQL genérico
     private func ejecutarSQL(_ sql: String) {
         var statement: OpaquePointer?
+
         if sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK {
             sqlite3_step(statement)
         } else {
             print("❌ Error SQL: \(String(cString: sqlite3_errmsg(db)))")
         }
+
         sqlite3_finalize(statement)
+    }
+
+    private func textoColumna(_ statement: OpaquePointer?, _ index: Int32) -> String {
+        guard let texto = sqlite3_column_text(statement, index) else {
+            return ""
+        }
+
+        return String(cString: texto)
     }
 
     // MARK: - Buscar usuario por correo
@@ -147,22 +161,29 @@ class DatabaseManager {
         var statement: OpaquePointer?
 
         guard sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK else {
+            print("❌ Error preparando buscarUsuario: \(String(cString: sqlite3_errmsg(db)))")
             return nil
         }
 
         sqlite3_bind_text(statement, 1, (correo as NSString).utf8String, -1, nil)
 
         if sqlite3_step(statement) == SQLITE_ROW {
-            let id         = Int(sqlite3_column_int(statement, 0))
-            let nombre     = String(cString: sqlite3_column_text(statement, 1))
-            let correoDB   = String(cString: sqlite3_column_text(statement, 2))
-            let contrasena = String(cString: sqlite3_column_text(statement, 3))
-            let rolString  = String(cString: sqlite3_column_text(statement, 4))
-            let rol        = RolUsuario(rawValue: rolString) ?? .jefatura
+            let id = Int(sqlite3_column_int(statement, 0))
+            let nombre = textoColumna(statement, 1)
+            let correoDB = textoColumna(statement, 2)
+            let contrasena = textoColumna(statement, 3)
+            let rolString = textoColumna(statement, 4)
+            let rol = RolUsuario(rawValue: rolString) ?? .jefatura
 
             sqlite3_finalize(statement)
 
-            let usuario = Usuario(id: id, nombre: nombre, correo: correoDB, rol: rol)
+            let usuario = Usuario(
+                id: id,
+                nombre: nombre,
+                correo: correoDB,
+                rol: rol
+            )
+
             return (contrasena, usuario)
         }
 
@@ -185,6 +206,28 @@ class DatabaseManager {
         necesitaProyector: Bool,
         estado: EstadoSolicitud
     ) -> Bool {
+        // Evita que jefatura duplique una solicitud activa en el mismo horario.
+        if existeSolicitudActiva(
+            sala: sala,
+            fecha: fecha,
+            horaInicio: horaInicio,
+            horaFin: horaFin
+        ) {
+            print("⚠️ Ya existe una solicitud activa en ese horario.")
+            return false
+        }
+
+        // Si ya hay reservación confirmada, no se puede solicitar.
+        if existeReservacionConfirmada(
+            sala: sala,
+            fecha: fecha,
+            horaInicio: horaInicio,
+            horaFin: horaFin
+        ) {
+            print("⚠️ Ya existe una reservación confirmada en ese horario.")
+            return false
+        }
+
         let sql = """
             INSERT INTO solicitudes (
                 usuario_id,
@@ -251,7 +294,15 @@ class DatabaseManager {
                 necesita_proyector,
                 estado
             FROM solicitudes
-            ORDER BY id DESC;
+            ORDER BY
+                CASE
+                    WHEN estado = 'por_confirmar' THEN 0
+                    WHEN estado = 'pendiente' THEN 1
+                    WHEN estado = 'aprobada' THEN 2
+                    WHEN estado = 'rechazada' THEN 3
+                    ELSE 4
+                END,
+                id DESC;
         """
 
         var statement: OpaquePointer?
@@ -265,36 +316,36 @@ class DatabaseManager {
         while sqlite3_step(statement) == SQLITE_ROW {
             let id = Int(sqlite3_column_int(statement, 0))
             let usuarioId = Int(sqlite3_column_int(statement, 1))
-            let usuario = String(cString: sqlite3_column_text(statement, 2))
-            let correo = String(cString: sqlite3_column_text(statement, 3))
-            let sala = String(cString: sqlite3_column_text(statement, 4))
-            let fecha = String(cString: sqlite3_column_text(statement, 5))
-            let horaInicio = String(cString: sqlite3_column_text(statement, 6))
-            let horaFin = String(cString: sqlite3_column_text(statement, 7))
-            let motivo = String(cString: sqlite3_column_text(statement, 8))
+            let usuario = textoColumna(statement, 2)
+            let correo = textoColumna(statement, 3)
+            let sala = textoColumna(statement, 4)
+            let fecha = textoColumna(statement, 5)
+            let horaInicio = textoColumna(statement, 6)
+            let horaFin = textoColumna(statement, 7)
+            let motivo = textoColumna(statement, 8)
             let necesitaMicrofono = sqlite3_column_int(statement, 9) == 1
             let necesitaBocina = sqlite3_column_int(statement, 10) == 1
             let necesitaProyector = sqlite3_column_int(statement, 11) == 1
-            let estadoStr = String(cString: sqlite3_column_text(statement, 12))
+            let estadoStr = textoColumna(statement, 12)
             let estado = EstadoSolicitud(rawValue: estadoStr) ?? .pendiente
 
-            solicitudes.append(
-                Solicitud(
-                    id: id,
-                    usuarioId: usuarioId,
-                    usuario: usuario,
-                    correo: correo,
-                    sala: sala,
-                    fecha: fecha,
-                    horaInicio: horaInicio,
-                    horaFin: horaFin,
-                    motivo: motivo,
-                    necesitaMicrofono: necesitaMicrofono,
-                    necesitaBocina: necesitaBocina,
-                    necesitaProyector: necesitaProyector,
-                    estado: estado
-                )
+            let solicitud = Solicitud(
+                id: id,
+                usuarioId: usuarioId,
+                usuario: usuario,
+                correo: correo,
+                sala: sala,
+                fecha: fecha,
+                horaInicio: horaInicio,
+                horaFin: horaFin,
+                motivo: motivo,
+                necesitaMicrofono: necesitaMicrofono,
+                necesitaBocina: necesitaBocina,
+                necesitaProyector: necesitaProyector,
+                estado: estado
             )
+
+            solicitudes.append(solicitud)
         }
 
         sqlite3_finalize(statement)
@@ -307,13 +358,55 @@ class DatabaseManager {
         var statement: OpaquePointer?
 
         guard sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK else {
+            print("❌ Error preparando actualizarEstadoSolicitud: \(String(cString: sqlite3_errmsg(db)))")
             return
         }
 
         sqlite3_bind_text(statement, 1, (nuevoEstado.rawValue as NSString).utf8String, -1, nil)
-        sqlite3_bind_int(statement,  2, Int32(id))
-        sqlite3_step(statement)
+        sqlite3_bind_int(statement, 2, Int32(id))
+
+        if sqlite3_step(statement) != SQLITE_DONE {
+            print("❌ Error actualizando solicitud: \(String(cString: sqlite3_errmsg(db)))")
+        }
+
         sqlite3_finalize(statement)
+    }
+
+    // MARK: - Aprobar solicitud
+    func aprobarSolicitud(_ solicitud: Solicitud) -> Bool {
+        // Si alguien ya confirmó ese horario, se rechaza la solicitud.
+        if existeReservacionConfirmada(
+            sala: solicitud.sala,
+            fecha: solicitud.fecha,
+            horaInicio: solicitud.horaInicio,
+            horaFin: solicitud.horaFin
+        ) {
+            actualizarEstadoSolicitud(id: solicitud.id, nuevoEstado: .rechazada)
+            return false
+        }
+
+        let seGuardoReservacion = insertarReservacion(
+            usuarioId: solicitud.usuarioId,
+            nombreUsuario: solicitud.usuario,
+            sala: solicitud.sala,
+            fecha: solicitud.fecha,
+            horaInicio: solicitud.horaInicio,
+            horaFin: solicitud.horaFin,
+            tipo: .confirmada,
+            exceptoSolicitudId: solicitud.id
+        )
+
+        guard seGuardoReservacion else {
+            return false
+        }
+
+        actualizarEstadoSolicitud(id: solicitud.id, nuevoEstado: .aprobada)
+        return true
+    }
+
+    // MARK: - Rechazar solicitud
+    func rechazarSolicitud(id: Int) {
+        actualizarEstadoSolicitud(id: id, nuevoEstado: .rechazada)
     }
 
     // MARK: - Insertar reservación confirmada
@@ -324,40 +417,106 @@ class DatabaseManager {
         fecha: String,
         horaInicio: String,
         horaFin: String,
-        tipo: TipoReservacion
+        tipo: TipoReservacion,
+        exceptoSolicitudId: Int? = nil
     ) -> Bool {
-        let sql = """
-            INSERT INTO reservaciones (usuario_id, nombre_usuario, sala, fecha, hora_inicio, hora_fin, tipo)
-            VALUES (?, ?, ?, ?, ?, ?, ?);
-        """
-        var statement: OpaquePointer?
-
-        guard sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK else {
+        // No permite dos reservaciones confirmadas en el mismo horario.
+        if existeReservacionConfirmada(
+            sala: sala,
+            fecha: fecha,
+            horaInicio: horaInicio,
+            horaFin: horaFin
+        ) {
+            print("⚠️ Ya existe una reservación confirmada en ese horario.")
             return false
         }
 
-        sqlite3_bind_int(statement,  1, Int32(usuarioId))
+        let sql = """
+            INSERT INTO reservaciones (
+                usuario_id,
+                nombre_usuario,
+                sala,
+                fecha,
+                hora_inicio,
+                hora_fin,
+                tipo
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?);
+        """
+
+        var statement: OpaquePointer?
+
+        guard sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK else {
+            print("❌ Error preparando insertarReservacion: \(String(cString: sqlite3_errmsg(db)))")
+            return false
+        }
+
+        sqlite3_bind_int(statement, 1, Int32(usuarioId))
         sqlite3_bind_text(statement, 2, (nombreUsuario as NSString).utf8String, -1, nil)
-        sqlite3_bind_text(statement, 3, (sala          as NSString).utf8String, -1, nil)
-        sqlite3_bind_text(statement, 4, (fecha         as NSString).utf8String, -1, nil)
-        sqlite3_bind_text(statement, 5, (horaInicio    as NSString).utf8String, -1, nil)
-        sqlite3_bind_text(statement, 6, (horaFin       as NSString).utf8String, -1, nil)
+        sqlite3_bind_text(statement, 3, (sala as NSString).utf8String, -1, nil)
+        sqlite3_bind_text(statement, 4, (fecha as NSString).utf8String, -1, nil)
+        sqlite3_bind_text(statement, 5, (horaInicio as NSString).utf8String, -1, nil)
+        sqlite3_bind_text(statement, 6, (horaFin as NSString).utf8String, -1, nil)
         sqlite3_bind_text(statement, 7, (tipo.rawValue as NSString).utf8String, -1, nil)
 
         let resultado = sqlite3_step(statement) == SQLITE_DONE
+
+        if !resultado {
+            print("❌ Error insertando reservación: \(String(cString: sqlite3_errmsg(db)))")
+        }
+
         sqlite3_finalize(statement)
+
+        if resultado {
+            // Si se confirmó una reservación, las demás solicitudes en conflicto se rechazan.
+            rechazarSolicitudesEnConflicto(
+                sala: sala,
+                fecha: fecha,
+                horaInicio: horaInicio,
+                horaFin: horaFin,
+                exceptoSolicitudId: exceptoSolicitudId
+            )
+        }
+
         return resultado
     }
-    
+
+    // MARK: - Estado de horario
     func estadoHorario(
         sala: String,
         fecha: String,
         horaInicio: String,
         horaFin: String
     ) -> EstadoBloqueHorario {
+        if existeReservacionConfirmada(
+            sala: sala,
+            fecha: fecha,
+            horaInicio: horaInicio,
+            horaFin: horaFin
+        ) {
+            return .ocupado
+        }
 
-        // 1. Primero revisar si ya existe una reservación confirmada
-        let sqlReservacion = """
+        if existeSolicitudActiva(
+            sala: sala,
+            fecha: fecha,
+            horaInicio: horaInicio,
+            horaFin: horaFin
+        ) {
+            return .porConfirmar
+        }
+
+        return .disponible
+    }
+
+    // MARK: - Verificar reservación confirmada
+    func existeReservacionConfirmada(
+        sala: String,
+        fecha: String,
+        horaInicio: String,
+        horaFin: String
+    ) -> Bool {
+        let sql = """
             SELECT COUNT(*)
             FROM reservaciones
             WHERE sala = ?
@@ -366,28 +525,34 @@ class DatabaseManager {
             AND hora_fin > ?;
         """
 
-        var statementReservacion: OpaquePointer?
-        var ocupado = false
+        var statement: OpaquePointer?
+        var existe = false
 
-        if sqlite3_prepare_v2(db, sqlReservacion, -1, &statementReservacion, nil) == SQLITE_OK {
-            sqlite3_bind_text(statementReservacion, 1, (sala as NSString).utf8String, -1, nil)
-            sqlite3_bind_text(statementReservacion, 2, (fecha as NSString).utf8String, -1, nil)
-            sqlite3_bind_text(statementReservacion, 3, (horaFin as NSString).utf8String, -1, nil)
-            sqlite3_bind_text(statementReservacion, 4, (horaInicio as NSString).utf8String, -1, nil)
+        if sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK {
+            sqlite3_bind_text(statement, 1, (sala as NSString).utf8String, -1, nil)
+            sqlite3_bind_text(statement, 2, (fecha as NSString).utf8String, -1, nil)
+            sqlite3_bind_text(statement, 3, (horaFin as NSString).utf8String, -1, nil)
+            sqlite3_bind_text(statement, 4, (horaInicio as NSString).utf8String, -1, nil)
 
-            if sqlite3_step(statementReservacion) == SQLITE_ROW {
-                ocupado = sqlite3_column_int(statementReservacion, 0) > 0
+            if sqlite3_step(statement) == SQLITE_ROW {
+                existe = sqlite3_column_int(statement, 0) > 0
             }
+        } else {
+            print("❌ Error preparando existeReservacionConfirmada: \(String(cString: sqlite3_errmsg(db)))")
         }
 
-        sqlite3_finalize(statementReservacion)
+        sqlite3_finalize(statement)
+        return existe
+    }
 
-        if ocupado {
-            return .ocupado
-        }
-
-        // 2. Luego revisar si existe una solicitud apartada o pendiente
-        let sqlSolicitud = """
+    // MARK: - Verificar solicitud activa
+    func existeSolicitudActiva(
+        sala: String,
+        fecha: String,
+        horaInicio: String,
+        horaFin: String
+    ) -> Bool {
+        let sql = """
             SELECT COUNT(*)
             FROM solicitudes
             WHERE sala = ?
@@ -397,26 +562,70 @@ class DatabaseManager {
             AND hora_fin > ?;
         """
 
-        var statementSolicitud: OpaquePointer?
-        var porConfirmar = false
+        var statement: OpaquePointer?
+        var existe = false
 
-        if sqlite3_prepare_v2(db, sqlSolicitud, -1, &statementSolicitud, nil) == SQLITE_OK {
-            sqlite3_bind_text(statementSolicitud, 1, (sala as NSString).utf8String, -1, nil)
-            sqlite3_bind_text(statementSolicitud, 2, (fecha as NSString).utf8String, -1, nil)
-            sqlite3_bind_text(statementSolicitud, 3, (horaFin as NSString).utf8String, -1, nil)
-            sqlite3_bind_text(statementSolicitud, 4, (horaInicio as NSString).utf8String, -1, nil)
+        if sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK {
+            sqlite3_bind_text(statement, 1, (sala as NSString).utf8String, -1, nil)
+            sqlite3_bind_text(statement, 2, (fecha as NSString).utf8String, -1, nil)
+            sqlite3_bind_text(statement, 3, (horaFin as NSString).utf8String, -1, nil)
+            sqlite3_bind_text(statement, 4, (horaInicio as NSString).utf8String, -1, nil)
 
-            if sqlite3_step(statementSolicitud) == SQLITE_ROW {
-                porConfirmar = sqlite3_column_int(statementSolicitud, 0) > 0
+            if sqlite3_step(statement) == SQLITE_ROW {
+                existe = sqlite3_column_int(statement, 0) > 0
             }
+        } else {
+            print("❌ Error preparando existeSolicitudActiva: \(String(cString: sqlite3_errmsg(db)))")
         }
 
-        sqlite3_finalize(statementSolicitud)
+        sqlite3_finalize(statement)
+        return existe
+    }
 
-        if porConfirmar {
-            return .porConfirmar
+    // MARK: - Rechazar solicitudes en conflicto
+    func rechazarSolicitudesEnConflicto(
+        sala: String,
+        fecha: String,
+        horaInicio: String,
+        horaFin: String,
+        exceptoSolicitudId: Int? = nil
+    ) {
+        var sql = """
+            UPDATE solicitudes
+            SET estado = 'rechazada'
+            WHERE sala = ?
+            AND fecha = ?
+            AND estado IN ('pendiente', 'por_confirmar')
+            AND hora_inicio < ?
+            AND hora_fin > ?
+        """
+
+        if exceptoSolicitudId != nil {
+            sql += " AND id != ?"
         }
 
-        return .disponible
+        sql += ";"
+
+        var statement: OpaquePointer?
+
+        guard sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK else {
+            print("❌ Error preparando rechazarSolicitudesEnConflicto: \(String(cString: sqlite3_errmsg(db)))")
+            return
+        }
+
+        sqlite3_bind_text(statement, 1, (sala as NSString).utf8String, -1, nil)
+        sqlite3_bind_text(statement, 2, (fecha as NSString).utf8String, -1, nil)
+        sqlite3_bind_text(statement, 3, (horaFin as NSString).utf8String, -1, nil)
+        sqlite3_bind_text(statement, 4, (horaInicio as NSString).utf8String, -1, nil)
+
+        if let exceptoSolicitudId = exceptoSolicitudId {
+            sqlite3_bind_int(statement, 5, Int32(exceptoSolicitudId))
+        }
+
+        if sqlite3_step(statement) != SQLITE_DONE {
+            print("❌ Error rechazando solicitudes en conflicto: \(String(cString: sqlite3_errmsg(db)))")
+        }
+
+        sqlite3_finalize(statement)
     }
 }
