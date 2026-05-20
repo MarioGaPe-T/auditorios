@@ -2,8 +2,6 @@
 //  ContentView.swift
 //  45,43 - app final
 //
-//  Created by Alumno on 15/04/26.
-//
 
 import SwiftUI
 
@@ -12,6 +10,9 @@ enum PantallaActual {
     case olvideContrasena
     case reservacion
     case solicitudes
+    case usuarios
+    case salas
+    case estadoSolicitudes
 }
 
 struct ContentView: View {
@@ -23,7 +24,7 @@ struct ContentView: View {
         ZStack(alignment: .leading) {
             contenidoPrincipal
 
-            if (pantallaActual == .reservacion || pantallaActual == .solicitudes) && mostrarMenu {
+            if debeMostrarMenu && mostrarMenu {
                 Color.black.opacity(0.20)
                     .ignoresSafeArea()
                     .onTapGesture {
@@ -37,6 +38,16 @@ struct ContentView: View {
             }
         }
         .animation(.easeInOut(duration: 0.25), value: mostrarMenu)
+    }
+
+    private var debeMostrarMenu: Bool {
+        switch pantallaActual {
+        case .reservacion, .solicitudes, .usuarios, .salas, .estadoSolicitudes:
+            return true
+
+        case .login, .olvideContrasena:
+            return false
+        }
     }
 
     @ViewBuilder
@@ -68,20 +79,83 @@ struct ContentView: View {
                 ReservacionView(
                     usuario: usuario,
                     accionAbrirMenu: {
-                        withAnimation { mostrarMenu = true }
+                        withAnimation {
+                            mostrarMenu = true
+                        }
                     },
                     accionCerrarSesion: {
                         cerrarSesion()
                     }
                 )
+            } else {
+                LoginView(
+                    accionOlvideContrasena: {
+                        pantallaActual = .olvideContrasena
+                    },
+                    accionIngresar: { usuario in
+                        usuarioActual = usuario
+                        pantallaActual = .reservacion
+                    }
+                )
             }
 
         case .solicitudes:
-            if let usuario = usuarioActual {
+            if let usuario = usuarioActual,
+               usuario.rol == .administrador {
                 SolicitudesView(
                     usuario: usuario,
                     accionAbrirMenu: {
-                        withAnimation { mostrarMenu = true }
+                        withAnimation {
+                            mostrarMenu = true
+                        }
+                    },
+                    accionCerrarSesion: {
+                        cerrarSesion()
+                    }
+                )
+            } else {
+                pantallaNoAutorizada
+            }
+
+        case .usuarios:
+            if usuarioActual?.rol == .administrador {
+                UsuariosAdminView(
+                    accionAbrirMenu: {
+                        withAnimation {
+                            mostrarMenu = true
+                        }
+                    },
+                    accionCerrarSesion: {
+                        cerrarSesion()
+                    }
+                )
+            } else {
+                pantallaNoAutorizada
+            }
+
+        case .salas:
+            if usuarioActual?.rol == .administrador {
+                SalasAdminView(
+                    accionAbrirMenu: {
+                        withAnimation {
+                            mostrarMenu = true
+                        }
+                    },
+                    accionCerrarSesion: {
+                        cerrarSesion()
+                    }
+                )
+            } else {
+                pantallaNoAutorizada
+            }
+        case .estadoSolicitudes:
+            if let usuario = usuarioActual {
+                EstadoSolicitudesView(
+                    usuario: usuario,
+                    accionAbrirMenu: {
+                        withAnimation {
+                            mostrarMenu = true
+                        }
                     },
                     accionCerrarSesion: {
                         cerrarSesion()
@@ -96,18 +170,49 @@ struct ContentView: View {
             MenuLateralView(
                 usuario: usuarioActual,
                 accionInicio: {
-                    withAnimation { mostrarMenu = false }
+                    withAnimation {
+                        mostrarMenu = false
+                    }
+
                     pantallaActual = .reservacion
                 },
-                accionUsuarios: {},
-                accionRoles: {},
+                accionUsuarios: {
+                    withAnimation {
+                        mostrarMenu = false
+                    }
+
+                    if usuarioActual?.rol == .administrador {
+                        pantallaActual = .usuarios
+                    }
+                },
+                accionSalas: {
+                    withAnimation {
+                        mostrarMenu = false
+                    }
+
+                    if usuarioActual?.rol == .administrador {
+                        pantallaActual = .salas
+                    }
+                },
                 accionReservaciones: {
-                    withAnimation { mostrarMenu = false }
+                    withAnimation {
+                        mostrarMenu = false
+                    }
+
                     pantallaActual = .reservacion
+                },
+                accionEstadoSolicitudes: {
+                    withAnimation {
+                        mostrarMenu = false
+                    }
+
+                    pantallaActual = .estadoSolicitudes
                 },
                 accionSolicitudes: {
-                    withAnimation { mostrarMenu = false }
-                    // Solo el administrador puede ir a Solicitudes
+                    withAnimation {
+                        mostrarMenu = false
+                    }
+
                     if usuarioActual?.rol == .administrador {
                         pantallaActual = .solicitudes
                     }
@@ -136,6 +241,40 @@ struct ContentView: View {
             .background(Color(red: 0.93, green: 0.93, blue: 0.94))
         }
         .ignoresSafeArea()
+    }
+
+    private var pantallaNoAutorizada: some View {
+        ZStack {
+            Color(red: 0.93, green: 0.93, blue: 0.94)
+                .ignoresSafeArea()
+
+            VStack(spacing: 18) {
+                Image(systemName: "lock.fill")
+                    .font(.system(size: 54))
+                    .foregroundColor(Color(red: 1.00, green: 0.34, blue: 0.34))
+
+                Text("Acceso no autorizado")
+                    .font(.system(size: 24, weight: .bold))
+                    .foregroundColor(.black)
+
+                Text("Esta sección solo está disponible para administradores.")
+                    .font(.system(size: 15))
+                    .foregroundColor(.gray)
+                    .multilineTextAlignment(.center)
+
+                Button(action: {
+                    pantallaActual = .reservacion
+                }) {
+                    Text("Volver a reservaciones")
+                        .font(.system(size: 17, weight: .semibold))
+                        .foregroundColor(.white)
+                        .frame(width: 230, height: 52)
+                        .background(Color(red: 0.10, green: 0.45, blue: 0.67))
+                        .cornerRadius(18)
+                }
+            }
+            .padding()
+        }
     }
 
     private func cerrarSesion() {

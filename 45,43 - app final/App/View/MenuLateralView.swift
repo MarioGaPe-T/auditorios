@@ -2,8 +2,6 @@
 //  MenuLateralView.swift
 //  45,43 - app final
 //
-//  Created by Alumno on 15/04/26.
-//
 
 import SwiftUI
 
@@ -11,8 +9,9 @@ struct MenuLateralView: View {
     let usuario: Usuario?
     let accionInicio: () -> Void
     let accionUsuarios: () -> Void
-    let accionRoles: () -> Void
+    let accionSalas: () -> Void
     let accionReservaciones: () -> Void
+    let accionEstadoSolicitudes: () -> Void
     let accionSolicitudes: () -> Void
 
     var body: some View {
@@ -20,15 +19,15 @@ struct MenuLateralView: View {
             Color(red: 0.09, green: 0.12, blue: 0.25)
                 .ignoresSafeArea()
 
-            VStack(alignment: .leading, spacing: 46) {
+            VStack(alignment: .leading, spacing: 42) {
                 Spacer().frame(height: 28)
 
-                // Info del usuario
                 if let usuario = usuario {
                     VStack(alignment: .leading, spacing: 4) {
                         Text(usuario.nombre)
                             .font(.system(size: 18, weight: .bold))
                             .foregroundColor(.white)
+
                         Text(usuario.rol.descripcion)
                             .font(.system(size: 13, weight: .medium))
                             .foregroundColor(.white.opacity(0.65))
@@ -42,7 +41,18 @@ struct MenuLateralView: View {
                     accion: accionInicio
                 )
 
-                // Solo administrador ve Usuarios y Roles
+                itemMenu(
+                    icono: "calendar.badge.checkmark",
+                    titulo: "Reservaciones",
+                    accion: accionReservaciones
+                )
+
+                itemMenu(
+                    icono: "doc.text.magnifyingglass",
+                    titulo: "Estado solicitud",
+                    accion: accionEstadoSolicitudes
+                )
+
                 if usuario?.rol == .administrador {
                     itemMenu(
                         icono: "person.2.fill",
@@ -51,20 +61,11 @@ struct MenuLateralView: View {
                     )
 
                     itemMenu(
-                        icono: "person.crop.circle.badge.plus",
-                        titulo: "Roles",
-                        accion: accionRoles
+                        icono: "building.2.fill",
+                        titulo: "Salas",
+                        accion: accionSalas
                     )
-                }
 
-                itemMenu(
-                    icono: "calendar.badge.checkmark",
-                    titulo: "Reservaciones",
-                    accion: accionReservaciones
-                )
-
-                // Solo administrador ve Solicitudes
-                if usuario?.rol == .administrador {
                     itemMenu(
                         icono: "tray.full.fill",
                         titulo: "Solicitudes",
@@ -95,11 +96,11 @@ struct MenuLateralView: View {
         Button(action: accion) {
             HStack(spacing: 22) {
                 Image(systemName: icono)
-                    .font(.system(size: 42))
+                    .font(.system(size: 38))
                     .foregroundColor(.white)
 
                 Text(titulo)
-                    .font(.system(size: 25, weight: .semibold))
+                    .font(.system(size: 23, weight: .semibold))
                     .foregroundColor(.white)
             }
         }
@@ -108,11 +109,17 @@ struct MenuLateralView: View {
 
 #Preview {
     MenuLateralView(
-        usuario: Usuario(id: 1, nombre: "Admin", correo: "admin@test.com", rol: .administrador),
+        usuario: Usuario(
+            id: 1,
+            nombre: "Admin",
+            correo: "admin@test.com",
+            rol: .administrador
+        ),
         accionInicio: {},
         accionUsuarios: {},
-        accionRoles: {},
+        accionSalas: {},
         accionReservaciones: {},
+        accionEstadoSolicitudes: {},
         accionSolicitudes: {}
     )
 }

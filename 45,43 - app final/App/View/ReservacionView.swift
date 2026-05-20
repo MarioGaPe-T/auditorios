@@ -3,12 +3,21 @@
 //  45,43 - app final
 //
 
-//
-//  ReservacionView.swift
-//  45,43 - app final
-//
-
 import SwiftUI
+
+enum ModalReservacion: Identifiable {
+    case calendario
+    case formularioSolicitud
+
+    var id: Int {
+        switch self {
+        case .calendario:
+            return 1
+        case .formularioSolicitud:
+            return 2
+        }
+    }
+}
 
 struct ReservacionView: View {
     let usuario: Usuario
@@ -16,7 +25,7 @@ struct ReservacionView: View {
     let accionCerrarSesion: () -> Void
 
     @State private var fechaSeleccionada = Date()
-    @State private var mostrarCalendario = false
+    @State private var modalActiva: ModalReservacion? = nil
 
     @State private var seleccionados: Set<UUID> = []
     @State private var bloques: [BloqueHorario] = []
@@ -24,10 +33,15 @@ struct ReservacionView: View {
     @State private var mostrarConfirmacion = false
     @State private var mensajeConfirmacion = ""
 
-    @State private var mostrarFormularioSolicitud = false
     @State private var bloquesParaSolicitud: [BloqueHorario] = []
 
-    private let salaActual = "Sala Audiovisual E"
+    @State private var salas: [Sala] = []
+    @State private var salaSeleccionada: Sala? = nil
+
+    private var salaActual: String {
+        salaSeleccionada?.nombre ?? "Sala Audiovisual E"
+    }
+
     private let columnas = Array(repeating: GridItem(.flexible(), spacing: 10), count: 5)
 
     var body: some View {
@@ -46,6 +60,8 @@ struct ReservacionView: View {
                             .padding(.top, 10)
 
                         etiquetaRol
+
+                        selectorSala
 
                         leyendaEstados
 
@@ -71,59 +87,63 @@ struct ReservacionView: View {
             }
         }
         .onAppear {
+            cargarSalas()
             bloques = crearBloquesDeSemana(fechaBase: fechaSeleccionada)
             cargarEstadosDesdeBaseDeDatos()
         }
-        .sheet(isPresented: $mostrarCalendario) {
-            NavigationView {
-                VStack(spacing: 18) {
-                    DatePicker(
-                        "Selecciona una fecha",
-                        selection: $fechaSeleccionada,
-                        in: Calendar.current.startOfDay(for: Date())...,
-                        displayedComponents: .date
-                    )
-                    .datePickerStyle(.graphical)
-                    .padding()
+        .sheet(item: $modalActiva) { modal in
+            switch modal {
+            case .calendario:
+                NavigationView {
+                    VStack(spacing: 18) {
+                        DatePicker(
+                            "Selecciona una fecha",
+                            selection: $fechaSeleccionada,
+                            in: Calendar.current.startOfDay(for: Date())...,
+                            displayedComponents: .date
+                        )
+                        .datePickerStyle(.graphical)
+                        .padding()
 
-                    Button(action: {
-                        bloques = crearBloquesDeSemana(fechaBase: fechaSeleccionada)
-                        seleccionados.removeAll()
-                        cargarEstadosDesdeBaseDeDatos()
-                        mostrarCalendario = false
-                    }) {
-                        Text("Aceptar")
-                            .font(.system(size: 18, weight: .semibold))
-                            .foregroundColor(.white)
-                            .frame(maxWidth: .infinity)
-                            .frame(height: 54)
-                            .background(Color(red: 0.10, green: 0.45, blue: 0.67))
-                            .cornerRadius(28)
+                        Button(action: {
+                            bloques = crearBloquesDeSemana(fechaBase: fechaSeleccionada)
+                            seleccionados.removeAll()
+                            cargarEstadosDesdeBaseDeDatos()
+                            modalActiva = nil
+                        }) {
+                            Text("Aceptar")
+                                .font(.system(size: 18, weight: .semibold))
+                                .foregroundColor(.white)
+                                .frame(maxWidth: .infinity)
+                                .frame(height: 54)
+                                .background(Color(red: 0.10, green: 0.45, blue: 0.67))
+                                .cornerRadius(28)
+                        }
+                        .padding(.horizontal, 24)
+
+                        Spacer()
                     }
-                    .padding(.horizontal, 24)
+                    .navigationTitle("Calendario")
+                }
 
-                    Spacer()
-                }
-                .navigationTitle("Calendario")
+            case .formularioSolicitud:
+                FormularioSolicitudView(
+                    usuario: usuario,
+                    sala: salaActual,
+                    bloquesSeleccionados: bloquesParaSolicitud,
+                    accionCancelar: {
+                        modalActiva = nil
+                    },
+                    accionEnviar: { motivo, microfono, bocina, proyector in
+                        enviarFormularioSolicitud(
+                            motivo: motivo,
+                            necesitaMicrofono: microfono,
+                            necesitaBocina: bocina,
+                            necesitaProyector: proyector
+                        )
+                    }
+                )
             }
-        }
-        .sheet(isPresented: $mostrarFormularioSolicitud) {
-            FormularioSolicitudView(
-                usuario: usuario,
-                sala: salaActual,
-                bloquesSeleccionados: bloquesParaSolicitud,
-                accionCancelar: {
-                    mostrarFormularioSolicitud = false
-                },
-                accionEnviar: { motivo, microfono, bocina, proyector in
-                    enviarSolicitudJefatura(
-                        motivo: motivo,
-                        necesitaMicrofono: microfono,
-                        necesitaBocina: bocina,
-                        necesitaProyector: proyector
-                    )
-                }
-            )
         }
     }
 
@@ -198,6 +218,55 @@ struct ReservacionView: View {
         }
     }
 
+    // MARK: - Selector de sala
+
+    private var selectorSala: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Selecciona una sala")
+                .font(.system(size: 13, weight: .bold))
+                .foregroundColor(.gray)
+
+            if salas.isEmpty {
+                Text("No hay salas registradas.")
+                    .font(.system(size: 14))
+                    .foregroundColor(.gray)
+                    .padding()
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Color.white)
+                    .cornerRadius(14)
+            } else {
+                Picker("Sala", selection: Binding<Int>(
+                    get: {
+                        salaSeleccionada?.id ?? salas.first?.id ?? 0
+                    },
+                    set: { nuevoId in
+                        salaSeleccionada = salas.first(where: { $0.id == nuevoId })
+                        seleccionados.removeAll()
+                        cargarEstadosDesdeBaseDeDatos()
+                    }
+                )) {
+                    ForEach(salas) { sala in
+                        Text(sala.nombre).tag(sala.id)
+                    }
+                }
+                .pickerStyle(.menu)
+                .padding(.horizontal, 14)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .frame(height: 52)
+                .background(Color.white)
+                .cornerRadius(14)
+            }
+        }
+    }
+
+    private func cargarSalas() {
+        salas = DatabaseManager.shared.obtenerSalasActivas()
+
+        if salaSeleccionada == nil {
+            salaSeleccionada = salas.first
+        }
+    }
+
     // MARK: - Selector de semana
 
     private var selectorSemana: some View {
@@ -215,7 +284,7 @@ struct ReservacionView: View {
             Spacer()
 
             Button(action: {
-                mostrarCalendario = true
+                modalActiva = .calendario
             }) {
                 Text("Elegir fecha")
                     .font(.system(size: 16, weight: .semibold))
@@ -320,7 +389,6 @@ struct ReservacionView: View {
             return
         }
 
-        // Evita mezclar horarios de diferentes días en una sola solicitud/reservación.
         if let primerId = seleccionados.first,
            let primerBloque = bloques.first(where: { $0.id == primerId }),
            primerBloque.fecha != bloque.fecha {
@@ -407,12 +475,10 @@ struct ReservacionView: View {
     }
 
     private var etiquetaBotonPrincipal: String {
-        if usuario.rol == .administrador {
-            return "Reservar"
-        } else if usuario.rol == .directivo {
-            return "Reservar directo"
-        } else {
+        if usuario.rol == .jefatura {
             return "Enviar solicitud"
+        } else {
+            return "Llenar solicitud"
         }
     }
 
@@ -433,15 +499,11 @@ struct ReservacionView: View {
             return
         }
 
-        let bloquesSeleccionados = bloquesSeleccionadosOrdenados()
+        bloquesParaSolicitud = bloquesSeleccionadosOrdenados()
 
-        if usuario.rol == .jefatura {
-            bloquesParaSolicitud = bloquesSeleccionados
-            mostrarFormularioSolicitud = true
-            return
+        DispatchQueue.main.async {
+            modalActiva = .formularioSolicitud
         }
-
-        reservarDirectamente(bloquesSeleccionados)
     }
 
     private func reservarDirectamente(_ bloquesSeleccionados: [BloqueHorario]) {
@@ -476,7 +538,7 @@ struct ReservacionView: View {
         ocultarMensajeDespues()
     }
 
-    private func enviarSolicitudJefatura(
+    private func enviarFormularioSolicitud(
         motivo: String,
         necesitaMicrofono: Bool,
         necesitaBocina: Bool,
@@ -486,6 +548,7 @@ struct ReservacionView: View {
             if $0.fecha == $1.fecha {
                 return $0.horaInicio < $1.horaInicio
             }
+
             return $0.fecha < $1.fecha
         }
 
@@ -496,31 +559,54 @@ struct ReservacionView: View {
             return
         }
 
-        let exito = DatabaseManager.shared.insertarSolicitud(
-            usuarioId: usuario.id,
-            usuario: usuario.nombre,
-            correo: usuario.correo,
-            sala: salaActual,
-            fecha: primerBloque.fecha,
-            horaInicio: primerBloque.horaInicio,
-            horaFin: ultimoBloque.horaFin,
-            motivo: motivo,
-            necesitaMicrofono: necesitaMicrofono,
-            necesitaBocina: necesitaBocina,
-            necesitaProyector: necesitaProyector,
-            estado: .porConfirmar
-        )
+        let exito: Bool
 
-        mostrarFormularioSolicitud = false
+        if usuario.rol == .jefatura {
+            exito = DatabaseManager.shared.insertarSolicitud(
+                usuarioId: usuario.id,
+                usuario: usuario.nombre,
+                correo: usuario.correo,
+                sala: salaActual,
+                fecha: primerBloque.fecha,
+                horaInicio: primerBloque.horaInicio,
+                horaFin: ultimoBloque.horaFin,
+                motivo: motivo,
+                necesitaMicrofono: necesitaMicrofono,
+                necesitaBocina: necesitaBocina,
+                necesitaProyector: necesitaProyector,
+                estado: .porConfirmar
+            )
+        } else {
+            exito = DatabaseManager.shared.registrarSolicitudAutoAprobada(
+                usuarioId: usuario.id,
+                usuario: usuario.nombre,
+                correo: usuario.correo,
+                sala: salaActual,
+                fecha: primerBloque.fecha,
+                horaInicio: primerBloque.horaInicio,
+                horaFin: ultimoBloque.horaFin,
+                motivo: motivo,
+                necesitaMicrofono: necesitaMicrofono,
+                necesitaBocina: necesitaBocina,
+                necesitaProyector: necesitaProyector
+            )
+        }
+
+        modalActiva = nil
         mostrarConfirmacion = true
 
         if exito {
-            mensajeConfirmacion = "📋 Solicitud enviada. El horario quedó apartado."
+            if usuario.rol == .jefatura {
+                mensajeConfirmacion = "📋 Solicitud enviada. Quedó pendiente de aprobación."
+            } else {
+                mensajeConfirmacion = "✅ Solicitud enviada y aprobada automáticamente."
+            }
+
             seleccionados.removeAll()
             bloquesParaSolicitud.removeAll()
             cargarEstadosDesdeBaseDeDatos()
         } else {
-            mensajeConfirmacion = "❌ Error al enviar la solicitud."
+            mensajeConfirmacion = "❌ No se pudo enviar la solicitud."
         }
 
         ocultarMensajeDespues()
